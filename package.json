@@ -8,8 +8,7 @@
 	"scripts": {
 		"dev": "bun --hot src/index.tsx",
 		"start": "NODE_ENV=production bun dist/index.html",
-		"build": "bun run build.ts",
-		"prod": "NODE_ENV=production bun run build.ts && bun dist/index.html"
+		"build": "bun run build.ts"
 	},
 	"dependencies": {
 		"browser-image-compression": "^2.0.2",
