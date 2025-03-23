@@ -6,7 +6,8 @@ const server = serve({
     // Serve index.html for all unmatched routes.
     "/*": index,
   },
-
+  port: process.env.PORT || 3000,
+  hostname: process.env.HOST || "0.0.0.0",
   development: process.env.NODE_ENV !== "production",
 });
 

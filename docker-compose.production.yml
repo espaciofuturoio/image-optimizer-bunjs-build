@@ -1,0 +1,16 @@
+services:
+  bun_image_optimizer_api:
+    container_name: bun_image_optimizer_api_prod
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - bun_image_optimizer_network
+networks:
+  bun_image_optimizer_network:
+    name: bun_image_optimizer_network 
