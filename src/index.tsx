@@ -18,7 +18,7 @@ const server = serve({
       },
     }),
 
-    // Helper function to serve files with proper MIME types
+    // Helper function to serve files with proper MIME types and compression when supported
     "/assets/*": (req) => serveFile(req, "src"),
     "/uploads/*": (req) => serveFile(req, "uploads"),
   },
