@@ -17,7 +17,11 @@ const server = serve({
         "Content-Type": "text/plain",
       },
     }),
-
+    "/image-optimizer-preview.webp": new Response(await Bun.file("./src/assets/image-optimizer-preview.webp").bytes(), {
+      headers: {
+        "Content-Type": "image/webp",
+      },
+    }),
     // Helper function to serve files with proper MIME types
     "/assets/*": (req) => serveFile(req, "src"),
     "/uploads/*": (req) => serveFile(req, "uploads"),

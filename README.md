@@ -2,6 +2,12 @@
 
 A high-performance image compression and optimization service built with Bun.js, React, and TypeScript.
 
+<div align="center">
+  <img src="https://github.com/espaciofuturoio/image-optimizer-bunjs-build/blob/main/DEMO.gif" alt="Video demostration">
+</div>
+
+[Live Demo](https://tinypic.rubenabix.com/)
+
 ## Tech Stack
 
 - **Runtime & Bundler**: [Bun](https://bun.sh) - Fast JavaScript runtime and bundler
