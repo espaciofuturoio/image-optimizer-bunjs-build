@@ -1,0 +1,31 @@
+{
+	"name": "bun-react-template",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"main": "src/index.tsx",
+	"module": "src/index.tsx",
+	"scripts": {
+		"dev": "bun --hot src/index.tsx",
+		"start": "NODE_ENV=production bun src/index.tsx",
+		"build": "bun run build.ts",
+		"prod": "NODE_ENV=production bun run build.ts && bun dist/index.html"
+	},
+	"dependencies": {
+		"browser-image-compression": "^2.0.2",
+		"bun-plugin-tailwind": "^0.0.14",
+		"daisyui": "^5.0.9",
+		"heic-convert": "^2.1.0",
+		"react": "^19",
+		"react-dom": "^19",
+		"tailwindcss": "^4.0.6",
+		"webp-converter-browser": "^1.0.4"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"@types/heic-convert": "^2.1.0",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"typescript": "^5"
+	}
+}
