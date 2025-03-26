@@ -1,15 +1,15 @@
 import { chromium } from "playwright";
-import { optimizeImageServer } from "./image_compression_util";
+import { optimizeImageServer } from "../features/images/image_compression_util";
 import type {
 	ProgrammaticOptimizeOptions,
 	OptimizedImageResult,
-} from "./image_compression_util";
+} from "../features/images/image_compression_util";
 
 import {
 	DEFAULT_QUALITY,
 	DEFAULT_MAX_SIZE_MB,
 	DEFAULT_MAX_RESOLUTION,
-} from "./constants";
+} from "../constants";
 
 interface WindowWithOptimizeImage extends Window {
 	optimizeImage: () => Promise<{

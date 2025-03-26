@@ -1,4 +1,4 @@
-import { optimizeImage } from "../features/image_optimizer";
+import { optimizeImage } from "../features/images/image_optimizer";
 import { join } from "node:path";
 import type { Format } from "../types";
 import { PUBLIC_SERVER_URL } from "@/constants";

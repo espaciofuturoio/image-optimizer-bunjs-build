@@ -1,5 +1,5 @@
 import './App.css'
-import { SimpleImageUploader } from './simple_image_uploader'
+import { SimpleImageUploader } from './features/images/simple_image_uploader'
 
 export const App = () => {
   return (

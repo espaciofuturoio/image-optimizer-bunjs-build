@@ -2,7 +2,7 @@ import { serve } from "bun";
 import index from "./index.html";
 import { handleUploadOptimize } from "./routes/optimize";
 import { ENV } from "./env";
-import { serveUploads } from "./utils/fileServer";
+import { serveUploads } from "./utils/file_server";
 
 const server = serve({
   routes: {

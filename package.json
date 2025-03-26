@@ -12,9 +12,12 @@
 		"build": "bun run build.ts"
 	},
 	"dependencies": {
+		"@google-cloud/storage": "^7.15.2",
+		"@types/dotenv": "^8.2.3",
 		"browser-image-compression": "^2.0.2",
 		"bun-plugin-tailwind": "^0.0.15",
 		"daisyui": "^5.0.9",
+		"dotenv": "^16.4.7",
 		"heic-convert": "^2.1.0",
 		"nanoid": "^5.1.5",
 		"playwright": "^1.51.1",
