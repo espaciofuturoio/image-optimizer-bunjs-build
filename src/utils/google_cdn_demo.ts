@@ -54,15 +54,25 @@ interface FetchTimeResult {
 	type: ImageType;
 	originalFetchTimeMs: number;
 	optimizedFetchTimeMs: number;
-	improvement: number;
+	originalSizeKB: number;
+	optimizedSizeKB: number;
+	timeImprovement: number;
+	sizeReduction: number;
 }
 
-async function measureFetchTime(url: string): Promise<number> {
+async function measureResponseStats(
+	url: string,
+): Promise<{ timeMs: number; sizeKB: number }> {
 	const start = performance.now();
 	const response = await fetch(url);
 	const buffer = await response.arrayBuffer();
 	const end = performance.now();
-	return end - start;
+
+	const sizeKB = buffer.byteLength / 1024;
+	return {
+		timeMs: end - start,
+		sizeKB,
+	};
 }
 
 async function measureOptimizedImagesFetchTimes(
@@ -74,24 +84,36 @@ async function measureOptimizedImagesFetchTimes(
 		if (result.isRemote) {
 			console.log(`\nMeasuring ${type} image:`);
 
-			// Measure original image fetch time
-			const originalFetchTimeMs = await measureFetchTime(result.originalUrl);
-			console.log(`Original: ${originalFetchTimeMs.toFixed(2)}ms`);
+			// Measure original image stats
+			const originalStats = await measureResponseStats(result.originalUrl);
+			console.log(
+				`Original: ${originalStats.timeMs.toFixed(2)}ms, ${originalStats.sizeKB.toFixed(1)}KB`,
+			);
 
-			// Measure optimized image fetch time
-			const optimizedFetchTimeMs = await measureFetchTime(result.url);
-			console.log(`Optimized: ${optimizedFetchTimeMs.toFixed(2)}ms`);
+			// Measure optimized image stats
+			const optimizedStats = await measureResponseStats(result.url);
+			console.log(
+				`Optimized: ${optimizedStats.timeMs.toFixed(2)}ms, ${optimizedStats.sizeKB.toFixed(1)}KB`,
+			);
 
-			// Calculate improvement percentage
-			const improvement =
-				((originalFetchTimeMs - optimizedFetchTimeMs) / originalFetchTimeMs) *
+			// Calculate improvements
+			const timeImprovement =
+				((originalStats.timeMs - optimizedStats.timeMs) /
+					originalStats.timeMs) *
+				100;
+			const sizeReduction =
+				((originalStats.sizeKB - optimizedStats.sizeKB) /
+					originalStats.sizeKB) *
 				100;
 
 			fetchTimes.push({
 				type: type as ImageType,
-				originalFetchTimeMs,
-				optimizedFetchTimeMs,
-				improvement,
+				originalFetchTimeMs: originalStats.timeMs,
+				optimizedFetchTimeMs: optimizedStats.timeMs,
+				originalSizeKB: originalStats.sizeKB,
+				optimizedSizeKB: optimizedStats.sizeKB,
+				timeImprovement,
+				sizeReduction,
 			});
 		}
 	}
@@ -190,20 +212,22 @@ const createOptimizedImages = async (
 		// Optionally measure fetch times for remote images
 		const shouldMeasureFetchTimes = true; // Can be made configurable
 		if (shouldMeasureFetchTimes && remoteResults.thumbnail.isRemote) {
-			console.log("\nMeasuring fetch times for remote images...");
+			console.log("\nMeasuring fetch times and sizes for remote images...");
 			const fetchTimes = await measureOptimizedImagesFetchTimes(remoteResults);
 
-			console.log("\nFetch time comparison:");
-			for (const {
-				type,
-				originalFetchTimeMs,
-				optimizedFetchTimeMs,
-				improvement,
-			} of fetchTimes) {
-				console.log(`\n${type}:`);
-				console.log(`  Original:  ${originalFetchTimeMs.toFixed(2)}ms`);
-				console.log(`  Optimized: ${optimizedFetchTimeMs.toFixed(2)}ms`);
-				console.log(`  Improvement: ${improvement.toFixed(1)}%`);
+			console.log("\nComparison results:");
+			for (const result of fetchTimes) {
+				console.log(`\n${result.type}:`);
+				console.log(
+					`  Original:  ${result.originalFetchTimeMs.toFixed(2)}ms, ${result.originalSizeKB.toFixed(1)}KB`,
+				);
+				console.log(
+					`  Optimized: ${result.optimizedFetchTimeMs.toFixed(2)}ms, ${result.optimizedSizeKB.toFixed(1)}KB`,
+				);
+				console.log(
+					`  Time improvement: ${result.timeImprovement.toFixed(1)}%`,
+				);
+				console.log(`  Size reduction: ${result.sizeReduction.toFixed(1)}%`);
 			}
 		}
 	} catch (error) {
