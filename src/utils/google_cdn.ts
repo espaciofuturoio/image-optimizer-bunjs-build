@@ -1,8 +1,27 @@
 import { Storage } from "@google-cloud/storage";
 import path from "node:path";
 import crypto from "node:crypto";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileTypeFromBuffer } from "file-type";
 
 // Core Image Service Types
+interface ImageServiceConfig {
+	keyFilePath: string;
+}
+
+interface ImageServiceOptions {
+	cacheControl?: string;
+	contentType?: string;
+	metadata?: Record<string, string>;
+}
+
+interface ImageUrls {
+	directUrl: string;
+	cdnUrl: string;
+	gsUrl: string;
+}
+
 export interface CoreUploadOptions {
 	makePublic?: boolean;
 	cacheControl?: string;
@@ -14,13 +33,6 @@ export interface CoreImageMetadata {
 	fullHash: string;
 	uploadedAt: string;
 	[key: string]: string;
-}
-
-// Add new interface for URL formats
-export interface ImageUrls {
-	cdnUrl: string;
-	directUrl: string;
-	gsUrl: string;
 }
 
 // Core Image Service
@@ -38,14 +50,31 @@ export class CoreImageService {
 			`https://storage.googleapis.com/${bucketName}`;
 	}
 
-	public generateHash(content: ArrayBuffer): string {
+	public generateHash(
+		content: ArrayBuffer,
+		metadata?: Record<string, string>,
+	): string {
 		const hash = crypto.createHash("sha256");
 		hash.update(Buffer.from(content));
+
+		// Include metadata in hash calculation if provided
+		if (metadata) {
+			// Sort metadata keys to ensure consistent hash
+			const sortedMetadata = Object.keys(metadata)
+				.sort()
+				.map((key) => `${key}:${metadata[key]}`)
+				.join("|");
+			hash.update(sortedMetadata);
+		}
+
 		return hash.digest("hex");
 	}
 
 	public generateFileName(originalFileName: string, hash: string) {
-		const extension = path.extname(originalFileName);
+		// If originalFileName starts with a dot, it's just an extension
+		const extension = originalFileName.startsWith(".")
+			? originalFileName
+			: path.extname(originalFileName);
 		return `${hash}${extension}`;
 	}
 
@@ -79,7 +108,7 @@ export class CoreImageService {
 		} = options;
 
 		const fileContent = await Bun.file(filePath).arrayBuffer();
-		const hash = this.generateHash(fileContent);
+		const hash = this.generateHash(fileContent, metadata);
 
 		// Generate unique filename using the complete hash
 		const uniqueFileName = this.generateFileName(path.basename(filePath), hash);
@@ -116,23 +145,94 @@ export class CoreImageService {
 	}
 
 	public async saveToLocalImage(
-		optimizedImageUrl: string,
-		tempDir: string,
-	): Promise<string> {
-		// Download the optimized image
-		const response = await fetch(optimizedImageUrl);
-		const buffer = await response.arrayBuffer();
+		url: string,
+		outputDir: string,
+	): Promise<string | null> {
+		try {
+			console.log("Saving image from URL:", url);
 
-		// Generate hash and filename
-		const hash = this.generateHash(buffer);
-		const extension = path.extname(optimizedImageUrl);
-		const uniqueFileName = this.generateFileName(`.${extension}`, hash);
+			const response = await fetch(url, {
+				headers: {
+					Accept: "image/webp,image/*,*/*;q=0.8",
+					"Cache-Control": "no-cache",
+				},
+			});
 
-		// Save to temp directory
-		const tempFilePath = `${tempDir}/${uniqueFileName}`;
-		await Bun.write(tempFilePath, buffer);
+			if (!response.ok) {
+				throw new Error(
+					`Failed to fetch image: ${response.status} ${response.statusText}`,
+				);
+			}
 
-		return tempFilePath;
+			const buffer = await response.arrayBuffer();
+			console.log("Downloaded buffer size:", buffer.byteLength, "bytes");
+
+			// Detect file type from buffer
+			const fileType = await fileTypeFromBuffer(new Uint8Array(buffer));
+			console.log("Detected file type:", fileType);
+
+			// Generate hash from buffer using class method
+			const hash = this.generateHash(buffer);
+			console.log("Generated hash:", hash);
+
+			// Determine extension
+			let extension = ".webp"; // default
+			if (fileType) {
+				extension = `.${fileType.ext}`;
+				console.log("Using detected extension:", extension);
+			} else {
+				// Fallback to URL extension or content-type
+				const urlExtension = url.split(".").pop()?.toLowerCase();
+				const contentType = response.headers.get("content-type") || "";
+				console.log("Content-Type:", contentType);
+
+				if (
+					urlExtension &&
+					["jpg", "jpeg", "png", "webp", "gif"].includes(urlExtension)
+				) {
+					extension = `.${urlExtension}`;
+					console.log("Using URL extension:", extension);
+				} else if (
+					contentType.includes("jpeg") ||
+					contentType.includes("jpg")
+				) {
+					extension = ".jpg";
+					console.log("Using content-type extension:", extension);
+				} else if (contentType.includes("png")) {
+					extension = ".png";
+					console.log("Using content-type extension:", extension);
+				} else if (contentType.includes("webp")) {
+					extension = ".webp";
+					console.log("Using content-type extension:", extension);
+				} else if (contentType.includes("gif")) {
+					extension = ".gif";
+					console.log("Using content-type extension:", extension);
+				} else {
+					console.log("No extension found, using default:", extension);
+				}
+			}
+
+			// Generate unique filename
+			const filename = this.generateFileName(extension, hash);
+			const filepath = join(outputDir, filename);
+
+			// Save the file
+			await writeFile(filepath, new Uint8Array(buffer));
+			console.log("Saved file to:", filepath);
+
+			// Verify file was written
+			const savedFile = Bun.file(filepath);
+			const fileSize = savedFile.size;
+			if (fileSize === 0) {
+				throw new Error("File was written but has zero bytes");
+			}
+			console.log("Verified file size:", fileSize, "bytes");
+
+			return filepath;
+		} catch (error) {
+			console.error("Error saving image:", error);
+			return null;
+		}
 	}
 }
 

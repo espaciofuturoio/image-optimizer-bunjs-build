@@ -173,24 +173,45 @@ async function measureOptimizedImagesFetchTimes(
 	return fetchTimes;
 }
 
-const createOptimizedImages = async (
+interface OptimizedImageWithConfig extends OptimizedImageResult {
+	type: ImageType;
+	config: ImageConfig;
+	tempFilePath: string;
+}
+
+const optimizeImages = async (
 	source: string,
 	types: ImageType[],
-): Promise<Record<ImageType, OptimizedImage>> => {
-	const results: Record<ImageType, OptimizedImage> = {} as Record<
-		ImageType,
-		OptimizedImage
-	>;
+): Promise<OptimizedImageWithConfig[]> => {
 	const isRemote = source.startsWith("http");
-
-	// Download or get the source image
-	const imagePath = isRemote
-		? await imageService.saveToLocalImage(source, TMP_INPUT_IMAGES_DIR)
-		: source;
+	const tempFiles: string[] = [];
 
 	try {
+		// Download or get the source image
+		const imagePath = isRemote
+			? await imageService.saveToLocalImage(source, TMP_INPUT_IMAGES_DIR)
+			: source;
+		if (!imagePath) {
+			throw new Error("Failed to get image path");
+		}
+		tempFiles.push(imagePath);
+
+		// Log source image size
+		const sourceFile = Bun.file(imagePath);
+		const sourceSize = sourceFile.size;
+		const sourceSizeKB = Math.round((sourceSize / 1024) * 100) / 100;
+		console.log(`\nSource image size: ${sourceSizeKB}KB`);
+
+		const optimizedImages: OptimizedImageWithConfig[] = [];
+
 		for (const type of types) {
 			const config = imageConfigs[type];
+			console.log(`\nProcessing ${type} image with config:`, {
+				quality: config.quality,
+				maxWidth: config.maxWidth,
+				maxSizeMB: config.maxSizeMB,
+			});
+
 			const optimizedImage = (await optimizeImageWithPlaywright(imagePath, {
 				format: "webp",
 				...config,
@@ -202,10 +223,76 @@ const createOptimizedImages = async (
 				);
 			}
 
+			const originalSizeKB = optimizedImage.originalSize
+				? Math.round((optimizedImage.originalSize / 1024) * 100) / 100
+				: "unknown";
+			const optimizedSizeKB =
+				Math.round((optimizedImage.size / 1024) * 100) / 100;
+			const compressionRatio = optimizedImage.compressionRatio
+				? Math.round(optimizedImage.compressionRatio * 100) / 100
+				: "unknown";
+
+			console.log("Optimized image stats:", {
+				originalSize: `${originalSizeKB}KB`,
+				optimizedSize: `${optimizedSizeKB}KB`,
+				width: optimizedImage.width,
+				height: optimizedImage.height,
+				compressionRatio: `${compressionRatio}%`,
+			});
+
+			console.log("Optimized image URL:", optimizedImage.url);
+
 			const tempFilePath = await imageService.saveToLocalImage(
 				optimizedImage.url,
 				TMP_PRE_PROCESSED_IMAGES_DIR,
 			);
+			if (!tempFilePath) {
+				throw new Error("Failed to save optimized image");
+			}
+			tempFiles.push(tempFilePath);
+
+			// Log temp file size before upload
+			const tempFile = Bun.file(tempFilePath);
+			const tempFileSize = tempFile.size;
+			const tempFileSizeKB = Math.round((tempFileSize / 1024) * 100) / 100;
+			console.log(`Temp file size before upload: ${tempFileSizeKB}KB`);
+
+			optimizedImages.push({
+				...optimizedImage,
+				type,
+				config,
+				tempFilePath,
+			});
+		}
+
+		return optimizedImages;
+	} finally {
+		// Clean up input image only, keep optimized images for upload
+		if (isRemote && tempFiles[0]) {
+			try {
+				await Bun.write(tempFiles[0], "");
+			} catch (error) {
+				console.warn("Failed to clean up input file:", error);
+			}
+		}
+	}
+};
+
+const uploadToCDN = async (
+	optimizedImages: OptimizedImageWithConfig[],
+	source: string,
+): Promise<Record<ImageType, OptimizedImage>> => {
+	const results: Record<ImageType, OptimizedImage> = {} as Record<
+		ImageType,
+		OptimizedImage
+	>;
+	const isRemote = source.startsWith("http");
+	const tempFiles: string[] = [];
+
+	try {
+		for (const optimizedImage of optimizedImages) {
+			const { type, config, tempFilePath } = optimizedImage;
+			tempFiles.push(tempFilePath);
 
 			// Upload the optimized image to Google Cloud Storage with real estate specific metadata
 			const urls = await imageService.uploadImage(
@@ -227,12 +314,14 @@ const createOptimizedImages = async (
 						width: optimizedImage.width.toString(),
 						height: optimizedImage.height.toString(),
 						format: optimizedImage.format,
+						quality: config.quality.toString(),
+						maxWidth: config.maxWidth.toString(),
 					},
 				},
 			);
 
 			results[type] = {
-				url: urls.cdnUrl,
+				url: urls.directUrl,
 				originalUrl: source,
 				isRemote,
 			};
@@ -241,28 +330,41 @@ const createOptimizedImages = async (
 			console.log(`  CDN URL: ${urls.cdnUrl}`);
 			console.log(`  GS URL: ${urls.gsUrl}`);
 			console.log(`  Original URL: ${source}`);
-
-			// Clean up the temporary file
-			await Bun.write(tempFilePath, "");
 		}
 
 		return results;
 	} finally {
-		// Clean up the source image if it was downloaded
-		if (isRemote) {
-			await Bun.write(imagePath, "");
+		// Clean up all temporary files
+		for (const file of tempFiles) {
+			try {
+				await Bun.write(file, "");
+			} catch (error) {
+				console.warn(`Failed to clean up temporary file ${file}:`, error);
+			}
 		}
 	}
+};
+
+const createOptimizedImages = async (source: string, types: ImageType[]) => {
+	// Step 1: Optimize images
+	console.log("\nStep 1: Optimizing images...");
+	const optimizedImages = await optimizeImages(source, types);
+
+	// Step 2: Upload to CDN
+	console.log("\nStep 2: Uploading to CDN...");
+	const results = await uploadToCDN(optimizedImages, source);
+
+	return results;
 };
 
 (async () => {
 	try {
 		// Example with remote URL
 		const remoteImageUrl =
-			"https://image.wasi.co/eyJidWNrZXQiOiJzdGF0aWN3Iiwia2V5IjoiaW5tdWVibGVzXC9nMTA0MTIxOTIwMjMxMDMwMDUxNjM3LmpwZyIsImVkaXRzIjp7Im5vcm1hbGlzZSI6dHJ1ZSwicm90YXRlIjowLCJyZXNpemUiOnsid2lkdGgiOjkwMCwiaGVpZ2h0Ijo2NzUsImZpdCI6ImNvbnRhaW4iLCJiYWNrZ3JvdW5kIjp7InIiOjI1NSwiZyI6MjU1LCJiIjoyNTUsImFscGhhIjoxfX19fQ==";
+			"https://image.wasi.co/eyJidWNrZXQiOiJzdGF0aWN3Iiwia2V5IjoiaW5tdWVibGVzXC9nMTA0MTI4MjAyMzEwMzAwNTA2NTEuanBnIiwiZWRpdHMiOnsibm9ybWFsaXNlIjp0cnVlLCJyb3RhdGUiOjAsInJlc2l6ZSI6eyJ3aWR0aCI6OTAwLCJoZWlnaHQiOjY3NSwiZml0IjoiY29udGFpbiIsImJhY2tncm91bmQiOnsiciI6MjU1LCJnIjoyNTUsImIiOjI1NSwiYWxwaGEiOjF9fX19";
 
 		// Specify which types of images you want to generate
-		const typesToGenerate: ImageType[] = ["thumbnail", "full", "preview"];
+		const typesToGenerate: ImageType[] = ["full"]; // ["thumbnail", "full", "preview"];
 
 		// Process remote image
 		console.log("\nProcessing remote image...");
@@ -274,7 +376,7 @@ const createOptimizedImages = async (
 
 		// Optionally measure fetch times for remote images
 		const shouldMeasureFetchTimes = true; // Can be made configurable
-		if (shouldMeasureFetchTimes && remoteResults.thumbnail.isRemote) {
+		if (shouldMeasureFetchTimes && remoteResults.full.isRemote) {
 			console.log("\nMeasuring fetch times and sizes for remote images...");
 			const fetchTimes = await measureOptimizedImagesFetchTimes(remoteResults);
 

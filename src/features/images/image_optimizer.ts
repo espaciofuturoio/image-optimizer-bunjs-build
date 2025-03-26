@@ -200,7 +200,7 @@ export const optimizeImage = async (
 			size: outputBuffer.length,
 			width: metadata.width,
 			height: metadata.height,
-			url: `${baseUrl}/${process.env.UPLOAD_DIR}/${filename}`,
+			url: `${baseUrl}/${ENV.UPLOAD_DIR}/${filename}`,
 			path: outputPath,
 			success: true,
 		};
