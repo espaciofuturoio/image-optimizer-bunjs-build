@@ -4,6 +4,9 @@ import { optimizeImageWithPlaywright } from "./playwright_optimizer";
 import type { OptimizedImageResult } from "@/features/images/image_compression_util";
 import { mkdir } from "node:fs/promises";
 
+// Set the server URL for local development
+process.env.PUBLIC_SERVER_URL = "http://localhost:3000";
+
 dotenv.config();
 
 const imageService = createImageService(
@@ -168,6 +171,13 @@ const createOptimizedImages = async (
 						imageType: type,
 						optimized: "true",
 						uploadedBy: "real-estate-app",
+						originalSize: optimizedImage.originalSize?.toString() || "unknown",
+						optimizedSize: optimizedImage.size.toString(),
+						compressionRatio:
+							optimizedImage.compressionRatio?.toString() || "unknown",
+						width: optimizedImage.width.toString(),
+						height: optimizedImage.height.toString(),
+						format: optimizedImage.format,
 					},
 				},
 			);

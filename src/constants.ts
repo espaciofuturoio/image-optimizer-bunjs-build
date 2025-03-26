@@ -23,7 +23,6 @@ export const MAX_FILE_SIZE_MB = 10; // 10MB file size limit
 
 // Use environment variable with fallback
 // For client-side bundling
-export const PUBLIC_SERVER_URL =
-	typeof process !== "undefined" && process.env.PUBLIC_SERVER_URL
-		? process.env.PUBLIC_SERVER_URL
-		: "https://tinypic.rubenabix.com"; // http://localhost:3000 // https://tinypic.rubenabix.com
+// export const PUBLIC_SERVER_URL =
+//  "https://tinypic.rubenabix.com";
+export const PUBLIC_SERVER_URL = "http://localhost:3000";

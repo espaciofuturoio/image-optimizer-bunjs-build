@@ -76,3 +76,232 @@ This project leverages Bun instead of traditional bundlers like Vite for several
 - **All-in-one solution**: Bundler, runtime, and package manager in one tool
 - **JSX/TSX support**: Native support without additional configuration
 - **Reduced dependencies**: Fewer external tools and configurations needed
+
+## Prerequisites
+
+- BunJS installed
+- Google Cloud Platform account
+- Google Cloud SDK installed
+- Playwright installed
+
+## Setup
+
+1. Clone the repository
+2. Install dependencies:
+```bash
+bun install
+```
+
+3. Set up Google Cloud credentials:
+```bash
+# Login to Google Cloud
+gcloud auth login
+
+# Set your project
+gcloud config set project YOUR_PROJECT_ID
+```
+
+4. Create a new bucket using the setup script:
+```bash
+./setup-gcp-bucket.sh <bucket-name>
+```
+
+## Managing GCP Buckets
+
+The project includes a utility script to manage Google Cloud Storage buckets:
+
+```bash
+./manage-gcp-buckets.sh
+```
+
+This script provides the following options:
+1. List and remove buckets
+2. Quit
+
+When listing buckets, you can:
+- View all available buckets
+- Select a bucket by number to remove it
+- Confirm deletion by typing the full bucket name
+- Cancel the operation at any time by entering 'q'
+
+Example usage:
+```bash
+🚀 GCP Bucket Manager
+1. List and remove buckets
+q. Quit
+Choose an option: 1
+
+📦 Listing all buckets...
+
+Available buckets:
+1. bucket-name-1
+2. bucket-name-2
+3. bucket-name-3
+
+Select a bucket number to remove (or 'q' to quit):
+```
+
+⚠️ Warning: Bucket deletion is permanent and will remove all contents. Make sure to back up any important data before deletion.
+
+## Environment Variables
+
+Create a `.env` file with the following variables:
+```env
+GOOGLE_CLOUD_PROJECT_ID=your-project-id
+GOOGLE_CLOUD_BUCKET_NAME=your-bucket-name
+GOOGLE_CLOUD_KEY_FILE_PATH=path/to/your/service-account-key.json
+```
+
+# GCP Bucket with CDN Setup
+
+This script automates the setup of a Google Cloud Storage bucket with Cloud CDN for optimal image delivery performance.
+
+## Features
+
+- Automated GCP bucket creation with proper permissions
+- Cloud CDN setup for low latency content delivery
+- HTTPS support with SSL certificates
+- Global edge caching
+- Performance monitoring
+- Service account management
+- Security best practices
+
+## Prerequisites
+
+- Google Cloud SDK installed
+- Authenticated with Google Cloud (`gcloud auth login`)
+- Appropriate permissions in your GCP project
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd <repository-name>
+```
+
+2. Make the script executable:
+```bash
+chmod +x setup-gcp-bucket.sh
+```
+
+## Usage
+
+### Basic Setup
+```bash
+./setup-gcp-bucket.sh <bucket-name>
+```
+
+### Delete Existing Resources and Setup New
+```bash
+./setup-gcp-bucket.sh <bucket-name> --delete
+```
+
+## Low Latency Configuration
+
+The setup includes several optimizations for low latency content delivery:
+
+### 1. Global Edge Caching
+- Content cached at Google's edge locations worldwide
+- Users served from nearest edge location
+- 50-80% latency reduction compared to direct bucket access
+- Automatic failover and health checking
+
+### 2. Cache Optimization
+- Long-term caching (1 year) for static content
+- Immutable cache policy
+- Stale-while-revalidate strategy
+- Optimized Cache-Control headers
+
+### 3. Compression
+- Gzip compression for text-based content
+- Automatic image optimization
+- 60-80% size reduction for text
+- 20-40% size reduction for images
+
+### 4. Load Balancing
+- Global load balancing
+- Intelligent request routing
+- Automatic failover
+- Health checking
+
+### 5. Performance Monitoring
+- Real-time latency tracking
+- Request count monitoring
+- Cache hit ratio tracking
+- Automatic optimization
+
+## Performance Metrics
+
+### Expected Improvements
+
+1. **Latency**
+   - Direct bucket access: 100-300ms
+   - CDN access: 20-50ms
+   - Improvement: 80% faster
+
+2. **Throughput**
+   - Direct bucket: Limited by single location
+   - CDN: Distributed across global edge network
+   - Improvement: 10x+ higher concurrent requests
+
+3. **Cost Efficiency**
+   - Reduced bandwidth usage
+   - Lower origin server load
+   - Better resource utilization
+
+## Security Features
+
+- HTTPS enabled by default
+- SSL certificate configuration
+- HSTS enabled
+- CORS configured
+- Secure headers
+- Service account with minimal permissions
+
+## Environment Variables
+
+The script creates a `.env` file with:
+```bash
+GOOGLE_CLOUD_PROJECT_ID=your-project-id
+GOOGLE_CLOUD_BUCKET_NAME=your-bucket-name
+GOOGLE_CLOUD_KEY_FILE_PATH=path/to/your/key.json
+```
+
+## Next Steps
+
+1. Add `.env` to your `.gitignore`
+2. Keep service account key secure
+3. Set up bucket lifecycle rules
+4. Configure DNS for custom domain
+5. Test CDN URL
+6. Monitor performance in Cloud Console
+7. Wait for SSL certificate (up to 24 hours)
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Service Account Propagation**
+   - Wait 10-15 seconds after creation
+   - Retry permission assignments
+
+2. **SSL Certificate**
+   - Takes up to 24 hours to provision
+   - Check certificate status in Cloud Console
+
+3. **CDN Configuration**
+   - Wait 5-10 minutes for changes to propagate
+   - Monitor cache hit rates
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

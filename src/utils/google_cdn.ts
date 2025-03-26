@@ -8,7 +8,6 @@ export interface CoreUploadOptions {
 	cacheControl?: string;
 	contentType?: string;
 	metadata?: Record<string, string>;
-	region?: "asia" | "eu" | "us" | "sa";
 }
 
 export interface CoreImageMetadata {
@@ -17,20 +16,23 @@ export interface CoreImageMetadata {
 	[key: string]: string;
 }
 
-interface GeoLocation {
-	continent: string;
-	country: string;
-	region: string;
+// Add new interface for URL formats
+export interface ImageUrls {
+	cdnUrl: string;
+	directUrl: string;
+	gsUrl: string;
 }
 
 // Core Image Service
 export class CoreImageService {
 	private storage: Storage;
 	private bucketName: string;
+	private cdnUrl: string;
 
-	constructor(storage: Storage, bucketName: string) {
+	constructor(storage: Storage, bucketName: string, cdnUrl?: string) {
 		this.storage = storage;
 		this.bucketName = bucketName;
+		this.cdnUrl = cdnUrl || `https://storage.googleapis.com/${bucketName}`;
 	}
 
 	public generateHash(content: ArrayBuffer): string {
@@ -44,75 +46,28 @@ export class CoreImageService {
 		return `${hash}${extension}`;
 	}
 
-	private getCDNUrl(destination: string, region?: string): string {
-		// Default global CDN URL
-		if (!region) {
-			return `https://${this.bucketName}.storage.googleapis.com/${destination}`;
-		}
-
-		// Region-specific CDN URLs
-		switch (region) {
-			case "asia":
-				return `https://${this.bucketName}.storage.googleapis.com/${destination}`;
-			case "eu":
-				return `https://europe-west1-${this.bucketName}.storage.googleapis.com/${destination}`;
-			case "us":
-				return `https://us-central1-${this.bucketName}.storage.googleapis.com/${destination}`;
-			case "sa":
-				return `https://southamerica-east1-${this.bucketName}.storage.googleapis.com/${destination}`;
-			default:
-				return `https://${this.bucketName}.storage.googleapis.com/${destination}`;
+	public getImageUrl(imagePath: string, useCdn: boolean = true): string {
+		if (
+			useCdn &&
+			this.cdnUrl !== `https://storage.googleapis.com/${this.bucketName}`
+		) {
+			// Use CDN URL for optimized access
+			return `${this.cdnUrl}/${imagePath}`;
+		} else {
+			// Use direct storage URL
+			return `https://storage.googleapis.com/${this.bucketName}/${imagePath}`;
 		}
 	}
 
-	private async detectUserRegion(): Promise<"asia" | "eu" | "us" | "sa"> {
-		try {
-			const response = await fetch("https://ipapi.co/json/");
-			const data = (await response.json()) as GeoLocation;
-
-			// Prioritize Central America and USA
-			if (
-				data.country === "CR" ||
-				data.country === "GT" ||
-				data.country === "BZ" ||
-				data.country === "HN" ||
-				data.country === "SV" ||
-				data.country === "NI" ||
-				data.country === "PA"
-			) {
-				// Use US region for Central America as it's closest
-				return "us";
-			}
-
-			// For other regions, keep the default mapping
-			switch (data.continent) {
-				case "NA": // North America
-					return "us"; // Prioritized for USA
-				case "SA": // South America
-					return "us"; // Changed to US for better latency from Central America
-				case "AS": // Asia
-					return "asia";
-				case "EU": // Europe
-					return "eu";
-				default:
-					return "us"; // Default to US since it's your primary target
-			}
-		} catch (error) {
-			console.warn("Failed to detect region:", error);
-			return "us"; // Default to US for your target audience
-		}
+	public getGsUrl(imagePath: string): string {
+		return `gs://${this.bucketName}/${imagePath}`;
 	}
 
 	public async uploadImage(
 		filePath: string,
 		folder: string,
 		options: CoreUploadOptions = {},
-	): Promise<string> {
-		// If no region specified, detect it automatically
-		if (!options.region) {
-			options.region = await this.detectUserRegion();
-		}
-
+	): Promise<ImageUrls> {
 		const {
 			cacheControl = "public, max-age=31536000, immutable, must-revalidate, stale-while-revalidate=86400",
 			contentType = "image/webp",
@@ -131,8 +86,11 @@ export class CoreImageService {
 		const [exists] = await gcsFile.exists();
 		if (exists) {
 			console.log(`📝 File already exists with hash ${hash}`);
-			const cleanUrl = this.getCDNUrl(destination, options.region);
-			return cleanUrl;
+			return {
+				cdnUrl: this.getImageUrl(destination, true),
+				directUrl: this.getImageUrl(destination, false),
+				gsUrl: this.getGsUrl(destination),
+			};
 		}
 
 		const imageMetadata: CoreImageMetadata = {
@@ -144,7 +102,6 @@ export class CoreImageService {
 		await gcsFile.save(Buffer.from(fileContent), {
 			metadata: {
 				contentType,
-				cacheControl,
 				metadata: imageMetadata,
 				contentEncoding: "gzip",
 				cacheControl:
@@ -157,12 +114,11 @@ export class CoreImageService {
 			},
 		});
 
-		const cleanUrl = this.getCDNUrl(destination, options.region);
-		return cleanUrl;
-	}
-
-	public getImageUrl(imagePath: string): string {
-		return `https://storage.googleapis.com/${this.bucketName}/${imagePath}`;
+		return {
+			cdnUrl: this.getImageUrl(destination, true),
+			directUrl: this.getImageUrl(destination, false),
+			gsUrl: this.getGsUrl(destination),
+		};
 	}
 
 	public async saveToLocalImage(
@@ -190,10 +146,11 @@ export class CoreImageService {
 export function createImageService(
 	config: { keyFilePath: string },
 	bucketName: string,
+	cdnUrl?: string,
 ): CoreImageService {
 	const storage = new Storage({
 		keyFilename: config.keyFilePath,
 	});
 
-	return new CoreImageService(storage, bucketName);
+	return new CoreImageService(storage, bucketName, cdnUrl);
 }
