@@ -1,141 +1,144 @@
 import { Storage } from "@google-cloud/storage";
 import path from "node:path";
 import crypto from "node:crypto";
+import { file } from "bun";
+import type { File as StorageFile } from "@google-cloud/storage";
 
-interface StorageConfig {
-	keyFilePath: string;
-}
-
-interface UploadOptions {
+// Core Image Service Types
+export interface CoreUploadOptions {
+	makePublic?: boolean;
 	cacheControl?: string;
 	contentType?: string;
 	metadata?: Record<string, string>;
-	fileName?: string;
 }
 
-interface ImageMetadata {
-	propertyId?: string;
-	roomType?: string;
-	imageType?: "main" | "gallery" | "thumbnail";
-	originalWidth?: number;
-	originalHeight?: number;
-	uploadedBy: string;
+export interface CoreImageMetadata {
+	fullHash: string;
 	uploadedAt: string;
-	originalFileName?: string;
+	[key: string]: string;
 }
 
-// Helper function to get MIME type based on file extension
-const getMimeType = (filePath: string): string => {
-	const ext = path.extname(filePath).toLowerCase();
-	const mimeTypes: Record<string, string> = {
-		".jpg": "image/jpeg",
-		".jpeg": "image/jpeg",
-		".png": "image/png",
-		".gif": "image/gif",
-		".webp": "image/webp",
-		".svg": "image/svg+xml",
-	};
-	return mimeTypes[ext] || "application/octet-stream";
-};
+// Core Image Service
+export class CoreImageService {
+	private storage: Storage;
+	private bucketName: string;
 
-const createImageService = (config: StorageConfig, bucketName: string) => {
-	const storage = new Storage({ keyFilename: config.keyFilePath });
-	const bucket = storage.bucket(bucketName);
+	constructor(storage: Storage, bucketName: string) {
+		this.storage = storage;
+		this.bucketName = bucketName;
+	}
 
-	// Helper function to generate a unique file name
-	const generateUniqueFileName = (originalFileName: string): string => {
-		const timestamp = Date.now();
-		const randomString = crypto.randomBytes(8).toString("hex");
+	private generateHash(content: ArrayBuffer): string {
+		const hash = crypto.createHash("sha256");
+		hash.update(Buffer.from(content));
+		return hash.digest("hex");
+	}
+
+	private generateFileName(originalFileName: string, hash: string): string {
 		const extension = path.extname(originalFileName);
 		const nameWithoutExt = path.basename(originalFileName, extension);
-		return `${nameWithoutExt}-${timestamp}-${randomString}${extension}`;
-	};
+		const cleanName = nameWithoutExt.replace(/[^a-z0-9]/gi, "-").toLowerCase();
+		return `${cleanName}-${hash}${extension}`;
+	}
 
-	const uploadImage = async (
-		localFilePath: string,
-		destinationFolder = "",
-		options: UploadOptions = {},
-	): Promise<string> => {
+	public async uploadImage(
+		filePath: string,
+		folder: string,
+		options: CoreUploadOptions = {},
+	): Promise<string> {
 		const {
+			makePublic = true,
 			cacheControl = "public, max-age=31536000, immutable, must-revalidate",
+			contentType = "image/webp",
 			metadata = {},
-			fileName,
 		} = options;
 
-		// Detect content type from file extension
-		const contentType = options.contentType || getMimeType(localFilePath);
+		const fileContent = await Bun.file(filePath).arrayBuffer();
+		const hash = this.generateHash(fileContent);
 
-		// Generate a unique file name if not provided
-		const originalFileName = fileName || path.basename(localFilePath);
-		const uniqueFileName = generateUniqueFileName(originalFileName);
+		// Generate unique filename using the complete hash
+		const uniqueFileName = this.generateFileName(path.basename(filePath), hash);
+		const destination = `${folder}/${uniqueFileName}`;
+		const gcsFile = this.storage.bucket(this.bucketName).file(destination);
 
-		// Use forward slashes for consistency and database storage
-		const destination = path.posix.join(destinationFolder, uniqueFileName);
-
-		try {
-			// Create a file object
-			const file = bucket.file(destination);
-
-			// Enhanced metadata for real estate images
-			const enhancedMetadata: ImageMetadata = {
-				...metadata,
-				uploadedBy: "real-estate-app",
-				uploadedAt: new Date().toISOString(),
-				originalFileName,
-			};
-
-			// Upload the file with CDN optimizations
-			await file.save(localFilePath, {
-				metadata: {
-					cacheControl,
-					contentType,
-					...enhancedMetadata,
-				},
-				resumable: true,
-				chunkSize: 5 * 1024 * 1024, // 5MB chunks
-			});
-
-			// Generate clean URL for database storage
-			const cleanUrl = `https://storage.googleapis.com/${bucketName}/${destination}`;
-
-			console.log(`✅ Image uploaded successfully: ${cleanUrl}`);
+		// Check if file already exists
+		const [exists] = await gcsFile.exists();
+		if (exists) {
+			console.log(`📝 File already exists with hash ${hash}`);
+			const cleanUrl = `https://storage.googleapis.com/${this.bucketName}/${destination}`;
 			return cleanUrl;
-		} catch (error) {
-			console.error("❌ Error uploading image:", error);
-			throw error;
 		}
-	};
 
-	const downloadImage = async (
-		filePathInBucket: string,
-		destinationPath: string,
-	): Promise<void> => {
-		try {
-			const file = bucket.file(filePathInBucket);
-			await file.download({ destination: destinationPath });
-			console.log(`✅ Image downloaded to ${destinationPath}`);
-		} catch (error) {
-			console.error("❌ Error downloading image:", error);
-			throw error;
-		}
-	};
+		const imageMetadata: CoreImageMetadata = {
+			fullHash: hash,
+			uploadedAt: new Date().toISOString(),
+			...metadata,
+		};
 
-	const deleteFolder = async (folderPath: string): Promise<void> => {
-		try {
-			await bucket.deleteFiles({ prefix: folderPath });
-			console.log(`🗑️ Folder "${folderPath}" deleted successfully`);
-		} catch (error) {
-			console.error("❌ Error deleting folder:", error);
-			throw error;
-		}
-	};
+		await gcsFile.save(Buffer.from(fileContent), {
+			metadata: {
+				contentType,
+				cacheControl,
+				metadata: imageMetadata,
+			},
+			public: makePublic,
+		});
 
-	// Helper function to get CDN-optimized URL
-	const getImageUrl = (imagePath: string): string => {
-		return `https://storage.googleapis.com/${bucketName}/${imagePath}`;
-	};
+		const cleanUrl = `https://storage.googleapis.com/${this.bucketName}/${destination}`;
+		return cleanUrl;
+	}
 
-	return { uploadImage, downloadImage, deleteFolder, getImageUrl };
-};
+	public getImageUrl(imagePath: string): string {
+		return `https://storage.googleapis.com/${this.bucketName}/${imagePath}`;
+	}
+}
 
-export { createImageService };
+// Real Estate Specific Types
+export interface RealEstateUploadOptions extends CoreUploadOptions {
+	metadata: {
+		propertyId: string;
+		roomType: string;
+		imageType: "main" | "gallery" | "thumbnail";
+		optimized: "true" | "false";
+		uploadedBy: string;
+	} & Record<string, string>;
+}
+
+// Real Estate Image Service
+export class RealEstateImageService extends CoreImageService {
+	public async uploadPropertyImage(
+		filePath: string,
+		folder: string,
+		options: RealEstateUploadOptions,
+	): Promise<string> {
+		return this.uploadImage(filePath, folder, options);
+	}
+
+	public getOptimizedImageUrl(
+		imagePath: string,
+		useCase: "thumbnail" | "gallery" | "full",
+	): string {
+		// Since Google Cloud Storage doesn't support transformations,
+		// we'll just return the base URL for now
+		// In a real application, you might want to:
+		// 1. Use a separate image processing service (like Cloudinary)
+		// 2. Pre-generate different sizes during upload
+		// 3. Use a CDN that supports transformations
+		return this.getImageUrl(imagePath);
+	}
+}
+
+// Factory function to create the appropriate service
+export function createImageService(
+	config: { keyFilePath: string },
+	bucketName: string,
+	type: "core" | "real-estate" = "core",
+): CoreImageService | RealEstateImageService {
+	const storage = new Storage({
+		keyFilename: config.keyFilePath,
+	});
+
+	return type === "real-estate"
+		? new RealEstateImageService(storage, bucketName)
+		: new CoreImageService(storage, bucketName);
+}
