@@ -11,6 +11,7 @@ export interface ImageOptimizationOptions {
 	height?: number;
 	sourceFormat?: string;
 	outputDir: string;
+	baseUrl: string;
 }
 
 export interface OptimizedImageResult {
@@ -35,6 +36,7 @@ export const optimizeImage = async (
 		height,
 		sourceFormat = "unknown",
 		outputDir,
+		baseUrl,
 	} = options;
 
 	// Generate unique ID for the file
@@ -198,7 +200,7 @@ export const optimizeImage = async (
 			size: outputBuffer.length,
 			width: metadata.width,
 			height: metadata.height,
-			url: `${ENV.PUBLIC_SERVER_URL}/${outputDir}/${filename}`,
+			url: `${baseUrl}/${process.env.UPLOAD_DIR}/${filename}`,
 			path: outputPath,
 			success: true,
 		};

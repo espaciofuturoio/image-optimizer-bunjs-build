@@ -5,9 +5,11 @@ import type {
 	OptimizedImageResult,
 } from "./image_compression_util";
 
-const DEFAULT_QUALITY = 75;
-const DEFAULT_MAX_SIZE_MB = 1;
-const DEFAULT_MAX_RESOLUTION = 1920;
+import {
+	DEFAULT_QUALITY,
+	DEFAULT_MAX_SIZE_MB,
+	DEFAULT_MAX_RESOLUTION,
+} from "./constants";
 
 interface WindowWithOptimizeImage extends Window {
 	optimizeImage: () => Promise<{
@@ -19,6 +21,8 @@ interface WindowWithOptimizeImage extends Window {
 		error?: string;
 	}>;
 }
+
+// ONLY FOR INTERNAL USE
 
 export const optimizeImageWithPlaywright = async (
 	filePath: string,

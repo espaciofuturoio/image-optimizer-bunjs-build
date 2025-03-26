@@ -8,19 +8,9 @@ import {
   isAvifImage,
   convertAvifToWebP,
 } from './image_compression_util'
-
-type Format = 'webp' | 'avif' | 'jpeg' | 'png'
-
-// Define accepted file types
-const ACCEPTED_FILE_TYPES = "image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif"
-const ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.heic', '.heif']
-const ACCEPTED_FORMATS: Format[] = ['webp', 'avif', 'jpeg', 'png']
-
-// Default configuration values
-const DEFAULT_QUALITY = 75
-const DEFAULT_MAX_SIZE_MB = 1
-const DEFAULT_MAX_RESOLUTION = 2048
-const MAX_FILE_SIZE_MB = 40 // 40MB file size limit
+import { ACCEPTED_EXTENSIONS, ACCEPTED_FILE_TYPES, ACCEPTED_FORMATS, DEFAULT_MAX_RESOLUTION, DEFAULT_MAX_SIZE_MB, DEFAULT_QUALITY } from './constants'
+import { MAX_FILE_SIZE_MB } from './constants'
+import type { Format } from './types'
 
 // Utility function to format bytes into KB and MB
 const formatBytes = (bytes: number) => {

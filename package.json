@@ -13,14 +13,14 @@
 	},
 	"dependencies": {
 		"browser-image-compression": "^2.0.2",
-		"bun-plugin-tailwind": "^0.0.14",
+		"bun-plugin-tailwind": "^0.0.15",
 		"daisyui": "^5.0.9",
 		"heic-convert": "^2.1.0",
 		"nanoid": "^5.1.5",
 		"playwright": "^1.51.1",
 		"react": "^19",
 		"react-dom": "^19",
-		"tailwindcss": "^4.0.6",
+		"tailwindcss": "^4.0.16",
 		"webp-converter-browser": "^1.0.4",
 		"zod": "^3.24.2"
 	},

@@ -26,15 +26,33 @@ const server = serve({
     }),
     "/api/v1/upload/optimize": {
       POST: async (req) => {
-        const response = await handleUploadOptimize(req);
-        return Response.json(response);
+        // Validate content type
+        const contentType = req.headers.get("content-type") || "";
+        if (!contentType.includes("multipart/form-data")) {
+          return Response.json(
+            { success: false, message: "Content-Type must be multipart/form-data" },
+            { status: 400 }
+          );
+        }
+        try {
+          const response = await handleUploadOptimize(req);
+          return Response.json(response);
+        } catch (error) {
+          console.error("Error in upload optimize endpoint:", error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return Response.json(
+            { success: false, message: errorMessage },
+            { status: 400 }
+          );
+        }
       },
     },
     "/uploads/*": (req) => serveUploads(req),
   },
   error(error) {
     console.error(error);
-    return new Response(`Internal Error: ${error.message}`, {
+    // Generic error message for clients, details are logged server-side
+    return new Response("Internal Server Error", {
       status: 500,
       headers: {
         "Content-Type": "text/plain",

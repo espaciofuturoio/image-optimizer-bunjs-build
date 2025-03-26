@@ -1,5 +1,6 @@
 import { optimizeImageWithPlaywright } from "./playwright_optimizer";
 
+// TODO: continue basic example
 async function main() {
 	try {
 		// Get the image path from command line arguments
@@ -23,11 +24,7 @@ async function main() {
 
 		if (result.success) {
 			console.log("Image optimization successful!");
-			console.log("Optimized image URL:", result.url);
-			console.log("Original size:", result.originalSize);
-			console.log("Optimized size:", result.size);
-			console.log("Compression ratio:", result.compressionRatio);
-			console.log("Dimensions:", `${result.width}x${result.height}`);
+			console.dir(result, { depth: null });
 		} else {
 			console.error("Image optimization failed:", result.error);
 		}

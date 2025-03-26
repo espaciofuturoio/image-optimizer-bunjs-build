@@ -1,7 +1,7 @@
 import imageCompression from "browser-image-compression";
 import { blobToWebP } from "webp-converter-browser";
 import convert from "heic-convert/browser";
-import { API_BASE_URL } from "./constants";
+import { PUBLIC_SERVER_URL } from "./constants";
 
 const DEFAULT_QUALITY = 75;
 const DEFAULT_MAX_SIZE_MB = 1;
@@ -113,10 +113,13 @@ export const optimizeImageServer = async (
 		}
 
 		// Send the request to the server endpoint
-		const response = await fetch(`${API_BASE_URL}/api/v1/upload/optimize`, {
-			method: "POST",
-			body: formData,
-		});
+		const response = await fetch(
+			`${PUBLIC_SERVER_URL}/api/v1/upload/optimize`,
+			{
+				method: "POST",
+				body: formData,
+			},
+		);
 
 		if (!response.ok) {
 			const errorText = await response.text();
@@ -150,7 +153,7 @@ export const optimizeImageServer = async (
 		// Ensure URL is absolute
 		let imageUrl = result.result.url;
 		if (imageUrl.startsWith("/")) {
-			imageUrl = `${API_BASE_URL}${imageUrl}`;
+			imageUrl = `${PUBLIC_SERVER_URL}${imageUrl}`;
 		}
 
 		const serverResult = result.result;

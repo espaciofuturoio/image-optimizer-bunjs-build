@@ -1,3 +1,4 @@
+import { ENV } from "@/env";
 import { existsSync } from "node:fs";
 import { extname, join } from "node:path";
 
@@ -25,7 +26,8 @@ export const MIME_TYPES: Record<string, string> = {
 // Function to serve files with proper content types
 export function serveUploads(req: Request): Response {
 	const url = new URL(req.url);
-	const filePath = join(process.cwd(), url.pathname);
+	const sanitizedPath = url.pathname.replace(/^\/uploads\//, "");
+	const filePath = join(process.cwd(), ENV.UPLOAD_DIR, sanitizedPath);
 	if (existsSync(filePath)) {
 		const file = Bun.file(filePath);
 		const contentType =
