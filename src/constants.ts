@@ -1,3 +1,4 @@
-// Base API URL - can be configured based on environment
+// REMOTE
 export const API_BASE_URL = "https://tinyimage.rubenabix.com";
-// export const API_BASE_URL = "";
+// LOCAL
+// export const API_BASE_URL = "http://localhost:3000";

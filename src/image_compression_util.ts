@@ -113,7 +113,7 @@ export const optimizeImageServer = async (
 		}
 
 		// Send the request to the server endpoint
-		const response = await fetch(`${API_BASE_URL}/upload/optimize`, {
+		const response = await fetch(`${API_BASE_URL}/api/v1/upload/optimize`, {
 			method: "POST",
 			body: formData,
 		});

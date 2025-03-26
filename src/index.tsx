@@ -1,6 +1,8 @@
 import { serve } from "bun";
 import index from "./index.html";
-import { serveFile } from "./utils/fileServer";
+import { handleUploadOptimize } from "./routes/optimize";
+import { ENV } from "./env";
+import { serveUploads } from "./utils/fileServer";
 
 const server = serve({
   routes: {
@@ -22,12 +24,25 @@ const server = serve({
         "Content-Type": "image/webp",
       },
     }),
-    // Helper function to serve files with proper MIME types
-    "/assets/*": (req) => serveFile(req, "src"),
-    "/uploads/*": (req) => serveFile(req, "uploads"),
+    "/api/v1/upload/optimize": {
+      POST: async (req) => {
+        const response = await handleUploadOptimize(req);
+        return Response.json(response);
+      },
+    },
+    "/uploads/*": (req) => serveUploads(req),
   },
-  port: process.env.PORT || 3000,
-  development: process.env.NODE_ENV !== "production",
+  error(error) {
+    console.error(error);
+    return new Response(`Internal Error: ${error.message}`, {
+      status: 500,
+      headers: {
+        "Content-Type": "text/plain",
+      },
+    });
+  },
+  port: ENV.PORT || 3000,
+  development: ENV.NODE_ENV !== "production",
 });
 
 console.log(`🚀 Server running at ${server.url}`);
