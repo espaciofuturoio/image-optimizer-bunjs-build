@@ -1,7 +1,7 @@
 import imageCompression from "browser-image-compression";
 import { blobToWebP } from "webp-converter-browser";
 import convert from "heic-convert/browser";
-import { PUBLIC_SERVER_URL } from "./constants";
+import { PUBLIC_SERVER_URL } from "../../constants";
 
 const DEFAULT_QUALITY = 75;
 const DEFAULT_MAX_SIZE_MB = 1;
@@ -27,7 +27,6 @@ export type OptimizedImageResult = {
 	success: boolean;
 	error?: string;
 	url: string;
-	blob?: Blob;
 	size: number;
 	width: number;
 	height: number;

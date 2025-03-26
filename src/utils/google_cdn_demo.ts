@@ -1,86 +1,108 @@
 import { createImageService } from "./google_cdn";
-import type { RealEstateImageService } from "./google_cdn";
 import dotenv from "dotenv";
-import path from "node:path";
+import { optimizeImageWithPlaywright } from "./playwright_optimizer";
+import type { OptimizedImageResult } from "@/features/images/image_compression_util";
+import { mkdir } from "node:fs/promises";
 
 dotenv.config();
 
-// Create real estate specific image service
 const imageService = createImageService(
 	{
 		keyFilePath: process.env.GOOGLE_CLOUD_KEY_FILE_PATH || "",
 	},
 	process.env.GOOGLE_CLOUD_BUCKET_NAME || "tinypic",
-	"real-estate",
-) as RealEstateImageService;
+);
+
+// Ensure tmp/images directory exists
+const TMP_IMAGES_DIR = "./tmp/images";
+await mkdir(TMP_IMAGES_DIR, { recursive: true });
+
+const getThumbnailImageConfig = {
+	quality: 100,
+	maxWidth: 200,
+	maxSizeMB: 1,
+};
+
+const getFullImageConfig = {
+	quality: 75,
+	maxWidth: 1200,
+	maxSizeMB: 1,
+};
+
+const previewImageConfig = {
+	quality: 75,
+	maxWidth: 720,
+	maxSizeMB: 1,
+};
+
+interface OptimizedImage {
+	url: string;
+}
+
+async function createOptimizedImages(
+	imagePath: string,
+	configs: Record<string, typeof getFullImageConfig>,
+): Promise<Record<string, OptimizedImage>> {
+	const results: Record<string, OptimizedImage> = {};
+
+	for (const [type, config] of Object.entries(configs)) {
+		const optimizedImage = await optimizeImageWithPlaywright(imagePath, {
+			format: "webp",
+			...config,
+		});
+
+		if (!optimizedImage.success) {
+			throw new Error(
+				`Failed to optimize ${type} image: ${optimizedImage.error}`,
+			);
+		}
+
+		const tempFilePath = await imageService.saveOptimizedImage(
+			optimizedImage.url,
+			TMP_IMAGES_DIR,
+		);
+
+		// Upload the optimized image to Google Cloud Storage with real estate specific metadata
+		const url = await imageService.uploadImage(
+			tempFilePath,
+			`rubenabix/${type}`,
+			{
+				cacheControl: "public, max-age=31536000, immutable, must-revalidate",
+				contentType: "image/webp",
+				metadata: {
+					propertyId: "PROP123",
+					roomType: "living-room",
+					imageType: type,
+					optimized: "true",
+					uploadedBy: "real-estate-app",
+				},
+			},
+		);
+
+		results[type] = { url };
+		console.log(`\n${type} image uploaded URL:`, url);
+
+		// Clean up the temporary file
+		await Bun.write(tempFilePath, "");
+	}
+
+	return results;
+}
 
 (async () => {
 	try {
 		const imagePath =
 			"/Users/ruben/Documents/projects/espaciofuturoio/image-optimizer-bunjs-build/src/image.jpeg";
 
-		console.log("🔄 Testing content-based file naming and deduplication...");
+		const configs = {
+			thumbnail: getThumbnailImageConfig,
+			full: getFullImageConfig,
+			preview: previewImageConfig,
+		};
 
-		// First upload - should create a new file
-		const url1 = await imageService.uploadPropertyImage(
-			imagePath,
-			"rubenabix",
-			{
-				cacheControl: "public, max-age=31536000, immutable, must-revalidate",
-				metadata: {
-					propertyId: "PROP123",
-					roomType: "living-room",
-					imageType: "main",
-					optimized: "true",
-					uploadedBy: "real-estate-app",
-				},
-			},
-		);
-		console.log("\n1️⃣ First upload URL:", url1);
-
-		// Second upload of the same file - should return the same URL (deduplication)
-		const url2 = await imageService.uploadPropertyImage(
-			imagePath,
-			"rubenabix",
-			{
-				cacheControl: "public, max-age=31536000, immutable, must-revalidate",
-				metadata: {
-					propertyId: "PROP456", // Different metadata shouldn't affect deduplication
-					roomType: "bedroom",
-					imageType: "gallery",
-					optimized: "true",
-					uploadedBy: "real-estate-app",
-				},
-			},
-		);
-		console.log("\n2️⃣ Second upload URL (should be same):", url2);
-
-		// Verify URLs are the same (deduplication working)
-		console.log("\n✅ URLs match:", url1 === url2);
-
-		console.log(
-			"\n📝 Note: For image transformations (resize, optimize, etc.), consider:",
-		);
-		console.log(
-			"   1. Using a dedicated image processing service (e.g., Cloudinary)",
-		);
-		console.log("   2. Pre-generating different sizes during upload");
-		console.log("   3. Using a CDN that supports transformations");
-		console.log("   4. Implementing server-side image processing");
-
-		// The following would test collision handling in production:
-		// 1. Different images that generate the same short hash
-		// 2. System would detect collision and append a suffix
-		// 3. Both images would be stored with different suffixes
-
-		console.log(
-			"\n📝 Note: In production, if two different images generate the same short hash:",
-		);
-		console.log("   - System will detect the collision");
-		console.log("   - Compare full content to verify difference");
-		console.log("   - Append a suffix (-1, -2, etc.) to handle collisions");
-		console.log("   - Store both images with their unique names");
+		const optimizedImages = await createOptimizedImages(imagePath, configs);
+		console.log("\nFinal URLs:", optimizedImages);
 	} catch (error) {
-		console.error("Failed to upload image:", error);
+		console.error("Failed to process images:", error);
 	}
 })();
