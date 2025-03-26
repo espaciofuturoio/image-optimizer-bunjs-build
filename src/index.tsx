@@ -41,7 +41,7 @@ const server = serve({
       },
     });
   },
-  port: ENV.PORT || 3000,
+  port: ENV.PORT,
   development: ENV.NODE_ENV !== "production",
 });
 
