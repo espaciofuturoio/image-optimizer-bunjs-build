@@ -91,6 +91,8 @@ delete_existing_resources() {
 
     # Delete bucket if exists
     if gcloud storage buckets describe gs://$BUCKET_NAME &> /dev/null; then
+        echo "Deleting bucket contents..."
+        gcloud storage rm -r gs://$BUCKET_NAME/**
         echo "Deleting bucket..."
         gcloud storage buckets delete gs://$BUCKET_NAME -q
     fi
@@ -228,6 +230,12 @@ gcloud storage buckets add-iam-policy-binding gs://$BUCKET_NAME \
     --member=allUsers \
     --role=roles/storage.objectViewer
 check_status "Public read access configured" "Failed to set public read access"
+
+# Set bucket to public access
+echo "Configuring bucket for public access..."
+gcloud storage buckets update gs://$BUCKET_NAME \
+    --uniform-bucket-level-access
+check_status "Bucket public access configured" "Failed to configure bucket public access"
 
 # Create service account
 echo "Creating service account..."
@@ -456,19 +464,23 @@ EOL
 
 gcloud monitoring dashboards create \
     --project=$PROJECT_ID \
-    --dashboard-from-file=dashboard.json
+    --config-from-file=dashboard.json
 check_status "Monitoring dashboard created" "Failed to create monitoring dashboard"
 
 # Clean up temporary file
 rm dashboard.json
 
 # Create uptime check for CDN health
+echo "Creating uptime check for CDN health..."
 gcloud monitoring uptime create \
+    --project=$PROJECT_ID \
     --display-name="CDN Health Check" \
     --http-check \
     --period="300s" \
     --timeout="10s" \
-    --content-matcher="content=200" \
+    --port=443 \
+    --path="/" \
+    --use-ssl \
     --host="https://$LOAD_BALANCER_IP"
 check_status "Uptime check created" "Failed to create uptime check"
 

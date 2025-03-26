@@ -183,11 +183,15 @@ const createOptimizedImages = async (
 			);
 
 			results[type] = {
-				url,
+				url: url.cdnUrl,
 				originalUrl: source,
 				isRemote,
 			};
-			console.log(`\n${type} image uploaded URL:`, url);
+			console.log(`\n${type} image URLs:`);
+			console.log(`  Direct URL: ${url.directUrl}`);
+			console.log(`  CDN URL: ${url.cdnUrl}`);
+			console.log(`  GS URL: ${url.gsUrl}`);
+			console.log(`  Original URL: ${source}`);
 
 			// Clean up the temporary file
 			await Bun.write(tempFilePath, "");
