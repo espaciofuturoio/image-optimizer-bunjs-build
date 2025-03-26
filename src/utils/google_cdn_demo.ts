@@ -89,7 +89,6 @@ async function measureResponseStats(
 	while (retries > 0) {
 		try {
 			const response = await fetch(url, {
-				verbose: true,
 				headers: {
 					Accept: "image/webp,image/*,*/*;q=0.8",
 					"Cache-Control": "no-cache",

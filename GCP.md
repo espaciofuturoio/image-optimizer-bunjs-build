@@ -104,4 +104,5 @@ gcloud storage cp test.txt gs://tinypic/
 
 ```
 chmod +x setup-gcp-bucket.sh
+gcloud compute backend-buckets delete reality-one-v3-backend
 ```

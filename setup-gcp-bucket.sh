@@ -453,23 +453,48 @@ URL_MAP_NAME="${BUCKET_NAME//_/-}-urlmap"
 HTTP_PROXY_NAME="${BUCKET_NAME//_/-}-proxy"
 FORWARDING_RULE_NAME="${BUCKET_NAME//_/-}-rule"
 
-# Create backend bucket with CDN enabled
+# Create backend bucket with CDN enabled and optimized settings
 echo "Setting up backend bucket with CDN..."
 if gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME --global &> /dev/null; then
     print_warning "Backend bucket exists. Updating configuration..."
     gcloud compute backend-buckets update $BACKEND_BUCKET_NAME \
         --enable-cdn \
-        --gcs-bucket-name=$BUCKET_NAME
+        --gcs-bucket-name=$BUCKET_NAME \
+        --custom-response-header="Cache-Control: public, max-age=31536000, immutable, must-revalidate, stale-while-revalidate=86400" \
+        --custom-response-header="Access-Control-Allow-Origin: *" \
+        --custom-response-header="Access-Control-Allow-Methods: GET, HEAD, OPTIONS" \
+        --custom-response-header="Access-Control-Allow-Headers: Range, Origin, Accept-Encoding" \
+        --custom-response-header="Access-Control-Expose-Headers: Content-Length, Content-Range" \
+        --custom-response-header="Strict-Transport-Security: max-age=31536000; includeSubDomains; preload" \
+        --custom-response-header="X-Content-Type-Options: nosniff" \
+        --custom-response-header="X-Frame-Options: DENY" \
+        --custom-response-header="X-XSS-Protection: 1; mode=block" \
+        --custom-response-header="Referrer-Policy: strict-origin-when-cross-origin" \
+        --custom-response-header="Content-Security-Policy: default-src 'self' https://*.googleapis.com https://*.google.com; img-src 'self' https://*.googleapis.com https://*.google.com data:; style-src 'self' 'unsafe-inline' https://*.googleapis.com https://*.google.com; font-src 'self' https://*.googleapis.com https://*.google.com data:;"
     check_status "Backend bucket updated" "Failed to update backend bucket"
 else
     print_warning "Creating new backend bucket..."
-    gcloud compute backend-buckets create $BACKEND_BUCKET_NAME \
+    if gcloud compute backend-buckets create $BACKEND_BUCKET_NAME \
         --gcs-bucket-name=$BUCKET_NAME \
-        --enable-cdn
-    check_status "Backend bucket created" "Failed to create backend bucket"
+        --enable-cdn \
+        --custom-response-header="Cache-Control: public, max-age=31536000, immutable, must-revalidate, stale-while-revalidate=86400" \
+        --custom-response-header="Access-Control-Allow-Origin: *" \
+        --custom-response-header="Access-Control-Allow-Methods: GET, HEAD, OPTIONS" \
+        --custom-response-header="Access-Control-Allow-Headers: Range, Origin, Accept-Encoding" \
+        --custom-response-header="Access-Control-Expose-Headers: Content-Length, Content-Range" \
+        --custom-response-header="Strict-Transport-Security: max-age=31536000; includeSubDomains; preload" \
+        --custom-response-header="X-Content-Type-Options: nosniff" \
+        --custom-response-header="X-Frame-Options: DENY" \
+        --custom-response-header="X-XSS-Protection: 1; mode=block" \
+        --custom-response-header="Referrer-Policy: strict-origin-when-cross-origin" \
+        --custom-response-header="Content-Security-Policy: default-src 'self' https://*.googleapis.com https://*.google.com; img-src 'self' https://*.googleapis.com https://*.google.com data:; style-src 'self' 'unsafe-inline' https://*.googleapis.com https://*.google.com; font-src 'self' https://*.googleapis.com https://*.google.com data:;"; then
+        check_status "Backend bucket created" "Failed to create backend bucket"
+    else
+        print_warning "Backend bucket already exists, skipping creation"
+    fi
 fi
 
-# Create or update URL map
+# Create or update URL map with optimized caching
 echo "Setting up URL map with optimized caching..."
 if gcloud compute url-maps describe $URL_MAP_NAME --global &> /dev/null; then
     print_warning "URL map exists. Skipping creation."
@@ -480,12 +505,16 @@ else
     check_status "URL map created" "Failed to create URL map"
 fi
 
-# Create or update SSL certificate
+# Create or update SSL certificate with optimized settings
 echo "Setting up SSL certificate..."
 CERT_NAME="${BUCKET_NAME//_/-}-cert"
 CERT_DOMAIN="${BUCKET_NAME//_/-}.storage.googleapis.com"
 if gcloud compute ssl-certificates describe $CERT_NAME --global &> /dev/null; then
-    print_warning "SSL certificate exists. Skipping creation."
+    print_warning "SSL certificate exists. Updating configuration..."
+    gcloud compute ssl-certificates update $CERT_NAME \
+        --domains=$CERT_DOMAIN \
+        --global
+    check_status "SSL certificate updated" "Failed to update SSL certificate"
 else
     print_warning "Creating new SSL certificate..."
     gcloud compute ssl-certificates create $CERT_NAME \
@@ -494,31 +523,45 @@ else
     check_status "SSL certificate created" "Failed to create SSL certificate"
 fi
 
-# Create or update HTTPS proxy
+# Create or update HTTPS proxy with optimized settings
 echo "Setting up HTTPS proxy with performance settings..."
 HTTPS_PROXY_NAME="${BUCKET_NAME//_/-}-https-proxy"
 if gcloud compute target-https-proxies describe $HTTPS_PROXY_NAME --global &> /dev/null; then
-    print_warning "HTTPS proxy exists. Skipping creation."
+    print_warning "HTTPS proxy exists. Updating configuration..."
+    gcloud compute target-https-proxies update $HTTPS_PROXY_NAME \
+        --url-map=$URL_MAP_NAME \
+        --ssl-certificates=$CERT_NAME \
+        --description="Optimized for low latency image delivery with HTTPS" \
+        --quic-override=ENABLE
+    check_status "HTTPS proxy updated" "Failed to update HTTPS proxy"
 else
     print_warning "Creating new HTTPS proxy..."
     gcloud compute target-https-proxies create $HTTPS_PROXY_NAME \
         --url-map=$URL_MAP_NAME \
         --ssl-certificates=$CERT_NAME \
-        --description="Optimized for low latency image delivery with HTTPS"
+        --description="Optimized for low latency image delivery with HTTPS" \
+        --quic-override=ENABLE
     check_status "HTTPS proxy created" "Failed to create HTTPS proxy"
 fi
 
-# Create or update HTTPS forwarding rule
+# Create or update HTTPS forwarding rule with optimized settings
 echo "Setting up HTTPS forwarding rule..."
 HTTPS_FORWARDING_RULE_NAME="${BUCKET_NAME//_/-}-https-rule"
 if gcloud compute forwarding-rules describe $HTTPS_FORWARDING_RULE_NAME --global &> /dev/null; then
-    print_warning "HTTPS forwarding rule exists. Skipping creation."
+    print_warning "HTTPS forwarding rule exists. Updating configuration..."
+    gcloud compute forwarding-rules update $HTTPS_FORWARDING_RULE_NAME \
+        --global \
+        --target-https-proxy=$HTTPS_PROXY_NAME \
+        --ports=443 \
+        --description="Optimized for low latency image delivery"
+    check_status "HTTPS forwarding rule updated" "Failed to update HTTPS forwarding rule"
 else
     print_warning "Creating new HTTPS forwarding rule..."
     gcloud compute forwarding-rules create $HTTPS_FORWARDING_RULE_NAME \
         --global \
         --target-https-proxy=$HTTPS_PROXY_NAME \
-        --ports=443
+        --ports=443 \
+        --description="Optimized for low latency image delivery"
     check_status "HTTPS forwarding rule created" "Failed to create HTTPS forwarding rule"
 fi
 
