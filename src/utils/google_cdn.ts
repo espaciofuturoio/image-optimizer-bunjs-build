@@ -86,7 +86,7 @@ export class CoreImageService {
 		return `https://storage.googleapis.com/${this.bucketName}/${imagePath}`;
 	}
 
-	public async saveOptimizedImage(
+	public async saveToLocalImage(
 		optimizedImageUrl: string,
 		tempDir: string,
 	): Promise<string> {
