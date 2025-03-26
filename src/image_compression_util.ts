@@ -4,6 +4,8 @@ import convert from "heic-convert/browser";
 import { API_BASE_URL } from "./constants";
 
 const DEFAULT_QUALITY = 75;
+const DEFAULT_MAX_SIZE_MB = 1;
+const DEFAULT_MAX_RESOLUTION = 1920;
 
 export type CompressOptions = {
 	maxSizeMB: number;
@@ -211,7 +213,7 @@ export const convertHeicToJpeg = async (
 		// heic-convert/browser uses native browser capabilities for conversion
 		// It takes an ArrayBuffer and returns a converted Buffer
 		const jpegBuffer = await convert({
-			buffer: new Uint8Array(arrayBuffer),
+			buffer: new Uint8Array(arrayBuffer) as unknown as ArrayBufferLike,
 			format: "JPEG",
 			quality: quality / 100,
 		});
@@ -334,5 +336,100 @@ export const convertAvifToWebP = async (
 	} catch (error) {
 		console.error("AVIF to WebP conversion failed:", error);
 		throw error;
+	}
+};
+
+export type ProgrammaticOptimizeOptions = {
+	format: "webp" | "avif" | "jpeg" | "png";
+	quality?: number;
+	maxWidth?: number;
+	maxHeight?: number;
+	maxSizeMB?: number;
+};
+
+export const optimizeImageProgrammatically = async (
+	filePath: string,
+	options: ProgrammaticOptimizeOptions,
+): Promise<OptimizedImageResult> => {
+	try {
+		// Read the file using Bun's built-in file API
+		const file = await Bun.file(filePath);
+		const fileBuffer = await file.arrayBuffer();
+
+		// Create a File object from the buffer
+		const fileName = filePath.split("/").pop() || "image";
+		const fileType = file.type || "image/jpeg";
+		const fileObject = new File([new Blob([fileBuffer])], fileName, {
+			type: fileType,
+		});
+
+		// Determine if it's a HEIC/HEIF image
+		const isHeic = await isHeicOrHeifImage(fileObject);
+		let processedFile = fileObject;
+
+		// Handle HEIC conversion if needed
+		if (isHeic) {
+			const jpegFile = await convertHeicToJpeg(
+				fileObject,
+				options.quality || DEFAULT_QUALITY,
+			);
+			if (jpegFile && jpegFile.size > 0) {
+				processedFile = jpegFile;
+			}
+		}
+
+		// Handle AVIF conversion if needed
+		const isAvifSource = await isAvifImage(processedFile);
+		if (isAvifSource) {
+			const webpFile = await convertAvifToWebP(
+				processedFile,
+				options.quality || DEFAULT_QUALITY,
+			);
+			if (webpFile && webpFile.size > 0) {
+				processedFile = webpFile;
+			}
+		}
+		// Apply WebP conversion for non-AVIF files if requested
+		else if (options.format === "webp") {
+			const webpFile = await convertToWebP(
+				processedFile,
+				options.quality || DEFAULT_QUALITY,
+			);
+			if (webpFile && webpFile.size > 0) {
+				processedFile = webpFile;
+			}
+		}
+
+		// Apply basic compression
+		const compressedFile = await compressImage(processedFile, {
+			maxSizeMB: options.maxSizeMB || DEFAULT_MAX_SIZE_MB,
+			maxWidthOrHeight:
+				options.maxWidth || options.maxHeight || DEFAULT_MAX_RESOLUTION,
+			useWebWorker: true,
+			alwaysKeepResolution: false,
+		});
+
+		// Send to server for optimization
+		const result = await optimizeImageServer(compressedFile, {
+			format: options.format,
+			quality: options.quality || DEFAULT_QUALITY,
+			width: options.maxWidth,
+			height: options.maxHeight,
+			isHeic: isHeic,
+			sourceFormat: processedFile.type.split("/")[1] || undefined,
+		});
+
+		return result;
+	} catch (error) {
+		console.error("Programmatic image optimization failed:", error);
+		return {
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+			url: "",
+			size: 0,
+			width: 0,
+			height: 0,
+			format: options.format,
+		};
 	}
 };
