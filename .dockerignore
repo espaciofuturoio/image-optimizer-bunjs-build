@@ -17,3 +17,6 @@ coverage*
 uploads/*
 src/utils/storage-service-account.json
 tmp/* 
+
+test.txt
+uptime-config.json

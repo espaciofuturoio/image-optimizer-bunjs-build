@@ -6,6 +6,7 @@ import { mkdir } from "node:fs/promises";
 
 // Set the server URL for local development
 process.env.PUBLIC_SERVER_URL = "http://localhost:3000";
+process.env.CDN_BASE_URL = "https://34.149.157.123"; // Your load balancer IP
 
 dotenv.config();
 
@@ -183,13 +184,13 @@ const createOptimizedImages = async (
 			);
 
 			results[type] = {
-				url: url.cdnUrl,
+				url: `${process.env.CDN_BASE_URL}/rubenabix/${type}`,
 				originalUrl: source,
 				isRemote,
 			};
 			console.log(`\n${type} image URLs:`);
 			console.log(`  Direct URL: ${url.directUrl}`);
-			console.log(`  CDN URL: ${url.cdnUrl}`);
+			console.log(`  CDN URL: ${process.env.CDN_BASE_URL}/rubenabix/${type}`);
 			console.log(`  GS URL: ${url.gsUrl}`);
 			console.log(`  Original URL: ${source}`);
 

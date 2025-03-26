@@ -3,12 +3,13 @@
 # Check if bucket name is provided
 if [ -z "$1" ]; then
     echo "Error: Please provide a bucket name"
-    echo "Usage: ./setup-gcp-bucket.sh <bucket-name> [--delete]"
+    echo "Usage: ./setup-gcp-bucket.sh <bucket-name> [--delete] [--force]"
     exit 1
 fi
 
 BUCKET_NAME=$1
 DELETE_FLAG=$2
+FORCE_FLAG=$3
 PROJECT_ID="naye-tours"
 LOCATION="us-central1"
 SERVICE_ACCOUNT_NAME="real-estate-services"
@@ -50,7 +51,7 @@ check_status() {
 
 # Function to delete existing resources
 delete_existing_resources() {
-    echo -e "\n${YELLOW}Deleting existing resources...${NC}"
+    echo "Deleting existing resources..."
     
     # Convert bucket name to valid backend bucket name (replace underscores with hyphens)
     BACKEND_BUCKET_NAME="${BUCKET_NAME//_/-}-backend"
@@ -59,54 +60,83 @@ delete_existing_resources() {
     HTTPS_FORWARDING_RULE_NAME="${BUCKET_NAME//_/-}-https-rule"
     CERT_NAME="${BUCKET_NAME//_/-}-cert"
 
-    # Delete forwarding rule if exists
+    # Delete forwarding rule first
+    echo "Deleting forwarding rule..."
     if gcloud compute forwarding-rules describe $HTTPS_FORWARDING_RULE_NAME --global &> /dev/null; then
-        echo "Deleting forwarding rule..."
         gcloud compute forwarding-rules delete $HTTPS_FORWARDING_RULE_NAME --global -q
+        check_status "Forwarding rule deleted" "Failed to delete forwarding rule"
     fi
 
-    # Delete HTTPS proxy if exists
-    if gcloud compute target-https-proxies describe $HTTPS_PROXY_NAME &> /dev/null; then
-        echo "Deleting HTTPS proxy..."
-        gcloud compute target-https-proxies delete $HTTPS_PROXY_NAME -q
+    # Wait for forwarding rule to be fully deleted
+    echo "Waiting for forwarding rule to be fully deleted..."
+    sleep 30
+
+    # Delete HTTPS proxy
+    echo "Deleting HTTPS proxy..."
+    if gcloud compute target-https-proxies describe $HTTPS_PROXY_NAME --global &> /dev/null; then
+        gcloud compute target-https-proxies delete $HTTPS_PROXY_NAME --global -q
+        check_status "HTTPS proxy deleted" "Failed to delete HTTPS proxy"
     fi
 
-    # Delete URL map if exists
-    if gcloud compute url-maps describe $URL_MAP_NAME &> /dev/null; then
-        echo "Deleting URL map..."
-        gcloud compute url-maps delete $URL_MAP_NAME -q
+    # Wait for HTTPS proxy to be fully deleted
+    echo "Waiting for HTTPS proxy to be fully deleted..."
+    sleep 30
+
+    # Delete URL map
+    echo "Deleting URL map..."
+    if gcloud compute url-maps describe $URL_MAP_NAME --global &> /dev/null; then
+        gcloud compute url-maps delete $URL_MAP_NAME --global -q
+        check_status "URL map deleted" "Failed to delete URL map"
     fi
 
-    # Delete backend bucket if exists
-    if gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME &> /dev/null; then
-        echo "Deleting backend bucket..."
-        gcloud compute backend-buckets delete $BACKEND_BUCKET_NAME -q
+    # Wait for URL map to be fully deleted
+    echo "Waiting for URL map to be fully deleted..."
+    sleep 30
+
+    # Delete backend bucket
+    echo "Deleting backend bucket..."
+    if gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME --global &> /dev/null; then
+        gcloud compute backend-buckets delete $BACKEND_BUCKET_NAME --global -q
+        check_status "Backend bucket deleted" "Failed to delete backend bucket"
     fi
 
-    # Delete SSL certificate if exists
-    if gcloud compute ssl-certificates describe $CERT_NAME &> /dev/null; then
-        echo "Deleting SSL certificate..."
-        gcloud compute ssl-certificates delete $CERT_NAME -q
+    # Wait for backend bucket to be fully deleted
+    echo "Waiting for backend bucket to be fully deleted..."
+    sleep 30
+
+    # Delete SSL certificate
+    echo "Deleting SSL certificate..."
+    if gcloud compute ssl-certificates describe $CERT_NAME --global &> /dev/null; then
+        gcloud compute ssl-certificates delete $CERT_NAME --global -q
+        check_status "SSL certificate deleted" "Failed to delete SSL certificate"
     fi
 
-    # Delete bucket if exists
+    # Wait for SSL certificate to be fully deleted
+    echo "Waiting for SSL certificate to be fully deleted..."
+    sleep 30
+
+    # Delete bucket contents
+    echo "Deleting bucket contents..."
     if gcloud storage buckets describe gs://$BUCKET_NAME &> /dev/null; then
-        echo "Deleting bucket contents..."
         gcloud storage rm -r gs://$BUCKET_NAME/**
-        echo "Deleting bucket..."
+    fi
+
+    # Delete bucket
+    echo "Deleting bucket..."
+    if gcloud storage buckets describe gs://$BUCKET_NAME &> /dev/null; then
         gcloud storage buckets delete gs://$BUCKET_NAME -q
     fi
 
-    # Delete service account if exists
+    # Delete service account
+    echo "Deleting service account..."
     if gcloud iam service-accounts describe $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com &> /dev/null; then
-        echo "Deleting service account..."
         gcloud iam service-accounts delete $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com -q
     fi
 
-    # Delete key file if exists
+    # Delete service account key
+    echo "Deleting service account key..."
     if [ -f "$KEY_FILE_PATH" ]; then
-        echo "Deleting service account key..."
-        rm -f $KEY_FILE_PATH
+        rm $KEY_FILE_PATH
     fi
 
     print_success "Existing resources deleted successfully"
@@ -183,10 +213,12 @@ validate_bucket_name "$BUCKET_NAME"
 # Check if bucket exists
 if check_bucket_exists "$BUCKET_NAME"; then
     print_warning "Bucket 'gs://$BUCKET_NAME' already exists!"
-    SUGGESTED_NAME=$(suggest_unique_name "$BUCKET_NAME")
-    echo "Suggested unique name: $SUGGESTED_NAME"
-    echo "Please run the script again with a different bucket name."
-    exit 1
+    if [ "$FORCE_FLAG" = "--force" ]; then
+        print_warning "Force flag detected. Will delete and recreate the bucket."
+        delete_existing_resources
+    else
+        print_warning "Using existing bucket. To recreate, use --force flag."
+    fi
 fi
 
 # Check if gcloud is installed
@@ -210,12 +242,16 @@ check_status "Project set successfully" "Failed to set project"
 
 # Create bucket
 echo "Creating bucket gs://$BUCKET_NAME..."
-gcloud storage buckets create gs://$BUCKET_NAME \
-    --location=$LOCATION \
-    --uniform-bucket-level-access \
-    --default-storage-class=STANDARD \
-    --project=$PROJECT_ID
-check_status "Bucket created successfully" "Failed to create bucket"
+if ! check_bucket_exists "$BUCKET_NAME"; then
+    gcloud storage buckets create gs://$BUCKET_NAME \
+        --location=$LOCATION \
+        --uniform-bucket-level-access \
+        --default-storage-class=STANDARD \
+        --project=$PROJECT_ID
+    check_status "Bucket created successfully" "Failed to create bucket"
+else
+    print_warning "Bucket already exists, skipping creation"
+fi
 
 # Clear any previous access settings
 echo "Clearing previous access settings..."
@@ -339,6 +375,76 @@ check_status "Read access verified" "Failed to verify read access"
 rm test.txt
 gcloud storage rm gs://$BUCKET_NAME/test.txt
 
+# Function to check if a resource exists
+resource_exists() {
+    local resource_type=$1
+    local resource_name=$2
+    local region_flag=$3
+    
+    case $resource_type in
+        "backend-bucket")
+            gcloud compute backend-buckets describe $resource_name $region_flag &> /dev/null
+            ;;
+        "url-map")
+            gcloud compute url-maps describe $resource_name $region_flag &> /dev/null
+            ;;
+        "ssl-certificate")
+            gcloud compute ssl-certificates describe $resource_name $region_flag &> /dev/null
+            ;;
+        "target-https-proxy")
+            gcloud compute target-https-proxies describe $resource_name $region_flag &> /dev/null
+            ;;
+        "forwarding-rule")
+            gcloud compute forwarding-rules describe $resource_name $region_flag &> /dev/null
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Function to create or update a resource
+create_or_update_resource() {
+    local resource_type=$1
+    local resource_name=$2
+    local region_flag=$3
+    local create_command=$4
+    local update_command=$5
+    
+    if resource_exists "$resource_type" "$resource_name" "$region_flag"; then
+        if [ "$FORCE_FLAG" = "--force" ]; then
+            print_warning "$resource_type '$resource_name' exists. Deleting and recreating..."
+            case $resource_type in
+                "backend-bucket")
+                    gcloud compute backend-buckets delete $resource_name $region_flag -q
+                    ;;
+                "url-map")
+                    gcloud compute url-maps delete $resource_name $region_flag -q
+                    ;;
+                "ssl-certificate")
+                    gcloud compute ssl-certificates delete $resource_name $region_flag -q
+                    ;;
+                "target-https-proxy")
+                    gcloud compute target-https-proxies delete $resource_name $region_flag -q
+                    ;;
+                "forwarding-rule")
+                    gcloud compute forwarding-rules delete $resource_name $region_flag -q
+                    ;;
+            esac
+            sleep 30  # Wait for deletion to complete
+            eval "$create_command"
+        else
+            print_warning "$resource_type '$resource_name' already exists. Skipping creation."
+            if [ ! -z "$update_command" ]; then
+                print_warning "Updating existing $resource_type..."
+                eval "$update_command"
+            fi
+        fi
+    else
+        eval "$create_command"
+    fi
+}
+
 # Configure Cloud CDN for low latency
 echo -e "\n${YELLOW}Setting up Cloud CDN for optimal latency...${NC}"
 echo "This will configure:"
@@ -353,46 +459,79 @@ URL_MAP_NAME="${BUCKET_NAME//_/-}-urlmap"
 HTTP_PROXY_NAME="${BUCKET_NAME//_/-}-proxy"
 FORWARDING_RULE_NAME="${BUCKET_NAME//_/-}-rule"
 
-# Create backend bucket with CDN enabled
-echo "Creating backend bucket with CDN..."
-gcloud compute backend-buckets create $BACKEND_BUCKET_NAME \
-    --gcs-bucket-name=$BUCKET_NAME \
-    --enable-cdn
-check_status "Backend bucket created" "Failed to create backend bucket"
+# Create or update backend bucket with CDN enabled
+echo "Setting up backend bucket with CDN..."
+if gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME --global &> /dev/null; then
+    print_warning "Backend bucket exists. Skipping creation."
+else
+    print_warning "Creating new backend bucket..."
+    if ! gcloud compute backend-buckets create $BACKEND_BUCKET_NAME \
+        --gcs-bucket-name=$BUCKET_NAME \
+        --enable-cdn 2>/dev/null; then
+        # If creation fails, check if it exists again (race condition)
+        if gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME --global &> /dev/null; then
+            print_warning "Backend bucket was created by another process. Skipping creation."
+        else
+            print_error "Failed to create backend bucket"
+            exit 1
+        fi
+    else
+        print_success "Backend bucket created successfully"
+    fi
+fi
 
-# Create URL map with cache key policy
-echo "Creating URL map with optimized caching..."
-gcloud compute url-maps create $URL_MAP_NAME \
-    --default-backend-bucket=$BACKEND_BUCKET_NAME
-check_status "URL map created" "Failed to create URL map"
+# Create or update URL map
+echo "Setting up URL map with optimized caching..."
+if gcloud compute url-maps describe $URL_MAP_NAME --global &> /dev/null; then
+    print_warning "URL map exists. Skipping creation."
+else
+    print_warning "Creating new URL map..."
+    gcloud compute url-maps create $URL_MAP_NAME \
+        --default-backend-bucket=$BACKEND_BUCKET_NAME
+    check_status "URL map created" "Failed to create URL map"
+fi
 
-# Create SSL certificate
-echo "Creating SSL certificate..."
+# Create or update SSL certificate
+echo "Setting up SSL certificate..."
 CERT_NAME="${BUCKET_NAME//_/-}-cert"
-# Convert bucket name to valid domain format (replace underscores with hyphens)
 CERT_DOMAIN="${BUCKET_NAME//_/-}.storage.googleapis.com"
-gcloud compute ssl-certificates create $CERT_NAME \
-    --domains=$CERT_DOMAIN \
-    --global
-check_status "SSL certificate created" "Failed to create SSL certificate"
+if gcloud compute ssl-certificates describe $CERT_NAME --global &> /dev/null; then
+    print_warning "SSL certificate exists. Skipping creation."
+else
+    print_warning "Creating new SSL certificate..."
+    gcloud compute ssl-certificates create $CERT_NAME \
+        --domains=$CERT_DOMAIN \
+        --global
+    check_status "SSL certificate created" "Failed to create SSL certificate"
+fi
 
-# Create HTTPS proxy with optimized settings
-echo "Creating HTTPS proxy with performance settings..."
+# Create or update HTTPS proxy
+echo "Setting up HTTPS proxy with performance settings..."
 HTTPS_PROXY_NAME="${BUCKET_NAME//_/-}-https-proxy"
-gcloud compute target-https-proxies create $HTTPS_PROXY_NAME \
-    --url-map=$URL_MAP_NAME \
-    --ssl-certificates=$CERT_NAME \
-    --description="Optimized for low latency image delivery with HTTPS"
-check_status "HTTPS proxy created" "Failed to create HTTPS proxy"
+if gcloud compute target-https-proxies describe $HTTPS_PROXY_NAME --global &> /dev/null; then
+    print_warning "HTTPS proxy exists. Skipping creation."
+else
+    print_warning "Creating new HTTPS proxy..."
+    gcloud compute target-https-proxies create $HTTPS_PROXY_NAME \
+        --url-map=$URL_MAP_NAME \
+        --ssl-certificates=$CERT_NAME \
+        --description="Optimized for low latency image delivery with HTTPS"
+    check_status "HTTPS proxy created" "Failed to create HTTPS proxy"
+fi
 
-# Create HTTPS forwarding rule
-echo "Creating HTTPS forwarding rule..."
+# Create or update HTTPS forwarding rule
+echo "Setting up HTTPS forwarding rule..."
 HTTPS_FORWARDING_RULE_NAME="${BUCKET_NAME//_/-}-https-rule"
-gcloud compute forwarding-rules create $HTTPS_FORWARDING_RULE_NAME \
-    --global \
-    --target-https-proxy=$HTTPS_PROXY_NAME \
-    --ports=443
-check_status "HTTPS forwarding rule created" "Failed to create HTTPS forwarding rule"
+if gcloud compute forwarding-rules describe $HTTPS_FORWARDING_RULE_NAME --global &> /dev/null; then
+    print_warning "HTTPS forwarding rule exists. Skipping creation."
+else
+    print_warning "Creating new HTTPS forwarding rule..."
+    gcloud compute forwarding-rules create $HTTPS_FORWARDING_RULE_NAME \
+        --global \
+        --target-https-proxy=$HTTPS_PROXY_NAME \
+        --ports=443
+    check_status "HTTPS forwarding rule created" "Failed to create HTTPS forwarding rule"
+fi
 
 # Get the load balancer IP
 echo "Waiting for load balancer IP to be assigned..."
@@ -411,80 +550,20 @@ gcloud compute backend-buckets update $BACKEND_BUCKET_NAME \
     --custom-response-header="Strict-Transport-Security: max-age=31536000; includeSubDomains"
 check_status "Cache policies configured" "Failed to configure cache policies"
 
-# Enable Cloud Monitoring
-echo "Enabling Cloud Monitoring..."
-gcloud services enable monitoring.googleapis.com
-check_status "Cloud Monitoring enabled" "Failed to enable Cloud Monitoring"
-
-# Set up performance monitoring
-echo "Setting up performance monitoring..."
-# Create monitoring dashboard for CDN metrics
-cat > dashboard.json << 'EOL'
-{
-    "displayName": "CDN Performance Dashboard",
-    "gridLayout": {
-        "columns": "2",
-        "widgets": [
-            {
-                "title": "CDN Request Count",
-                "xyChart": {
-                    "dataSets": [{
-                        "timeSeriesQuery": {
-                            "timeSeriesFilter": {
-                                "filter": "metric.type=\"compute.googleapis.com/backend/request_count\"",
-                                "aggregation": {
-                                    "alignmentPeriod": "3600s",
-                                    "perSeriesAligner": "ALIGN_RATE"
-                                }
-                            }
-                        }
-                    }]
-                }
-            },
-            {
-                "title": "CDN Latency",
-                "xyChart": {
-                    "dataSets": [{
-                        "timeSeriesQuery": {
-                            "timeSeriesFilter": {
-                                "filter": "metric.type=\"compute.googleapis.com/backend/latency\"",
-                                "aggregation": {
-                                    "alignmentPeriod": "3600s",
-                                    "perSeriesAligner": "ALIGN_MEAN"
-                                }
-                            }
-                        }
-                    }]
-                }
-            }
-        ]
-    }
-}
-EOL
-
-gcloud monitoring dashboards create \
-    --project=$PROJECT_ID \
-    --config-from-file=dashboard.json
-check_status "Monitoring dashboard created" "Failed to create monitoring dashboard"
-
-# Clean up temporary file
-rm dashboard.json
-
-# Create uptime check for CDN health
-echo "Creating uptime check for CDN health..."
-gcloud monitoring uptime create \
-    --project=$PROJECT_ID \
-    --display-name="CDN Health Check" \
-    --http-check \
-    --period="300s" \
-    --timeout="10s" \
-    --port=443 \
-    --path="/" \
-    --use-ssl \
-    --host="https://$LOAD_BALANCER_IP"
-check_status "Uptime check created" "Failed to create uptime check"
-
 print_success "🎉 GCP bucket and CDN setup completed successfully!"
+
+# Print CDN Information
+echo -e "\n${GREEN}📡 CDN Information:${NC}"
+echo "----------------------------------------"
+echo "Load Balancer IP: $LOAD_BALANCER_IP"
+echo "CDN Base URL: https://$LOAD_BALANCER_IP"
+echo "Example URLs:"
+echo "  - Thumbnail: https://$LOAD_BALANCER_IP/rubenabix/thumbnail"
+echo "  - Full: https://$LOAD_BALANCER_IP/rubenabix/full"
+echo "  - Preview: https://$LOAD_BALANCER_IP/rubenabix/preview"
+echo "----------------------------------------"
+echo -e "\n${YELLOW}⚠️  Note: Wait a few minutes for SSL certificate to propagate${NC}"
+
 echo "
 Bucket and CDN Configuration Details:
 - Bucket Name: $BUCKET_NAME
