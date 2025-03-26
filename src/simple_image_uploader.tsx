@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { uploadImage } from './upload'
 import {
   compressImage,
   convertToWebP,
@@ -9,19 +8,9 @@ import {
   isAvifImage,
   convertAvifToWebP,
 } from './image_compression_util'
-
-type Format = 'webp' | 'avif' | 'jpeg' | 'png'
-
-// Define accepted file types
-const ACCEPTED_FILE_TYPES = "image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif"
-const ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.heic', '.heif']
-const ACCEPTED_FORMATS: Format[] = ['webp', 'avif', 'jpeg', 'png']
-
-// Default configuration values
-const DEFAULT_QUALITY = 75
-const DEFAULT_MAX_SIZE_MB = 1
-const DEFAULT_MAX_RESOLUTION = 2048
-const MAX_FILE_SIZE_MB = 40 // 40MB file size limit
+import { ACCEPTED_EXTENSIONS, ACCEPTED_FILE_TYPES, ACCEPTED_FORMATS, DEFAULT_MAX_RESOLUTION, DEFAULT_MAX_SIZE_MB, DEFAULT_QUALITY } from './constants'
+import { MAX_FILE_SIZE_MB } from './constants'
+import type { Format } from './types'
 
 // Utility function to format bytes into KB and MB
 const formatBytes = (bytes: number) => {
@@ -244,7 +233,7 @@ export const SimpleImageUploader: React.FC<SimpleImageUploaderProps> = ({ onClie
     const container = event.currentTarget;
     const rect = container.getBoundingClientRect();
     const touch = event.touches[0];
-    const x = touch.clientX - rect.left;
+    const x = (touch?.clientX || 0) - rect.left;
     const position = (x / rect.width) * 100;
 
     // Clamp position between 0 and 100
@@ -305,7 +294,6 @@ export const SimpleImageUploader: React.FC<SimpleImageUploaderProps> = ({ onClie
           throw new Error('WebM video files cannot be processed. Please upload an image file instead.');
         }
         throw new Error('File appears to be corrupted or not a valid image format.');
-
       }
 
       // Set original preview
@@ -423,58 +411,19 @@ export const SimpleImageUploader: React.FC<SimpleImageUploaderProps> = ({ onClie
           showToast(`${result.format.toUpperCase()} conversion complete!`);
         } else {
           console.error('Server optimization failed:', result.error);
-          // Try direct upload as fallback
-          await directUpload(clientProcessedFile);
+          throw new Error(result.error || 'Server optimization failed');
         }
       } catch (error) {
         console.error('Server optimization failed:', error);
-        showToast('Server optimization failed. Trying direct upload...');
-
-        // Fallback to direct upload
-        await directUpload(clientProcessedFile);
+        throw error;
       }
     } catch (error) {
       console.error('Processing failed:', error);
       setUploadStatus({ success: false, message: String(error) });
+      throw error;
     } finally {
       setIsUploading(false);
       setProcessingImage(false);
-    }
-  };
-
-  const directUpload = async (fileToUpload: File) => {
-    try {
-      showToast('Performing direct upload...');
-      const response = await uploadImage(fileToUpload);
-      const url = response.result?.variants?.[0];
-
-      if (url) {
-        setUploadedUrl(url);
-
-        // Estimate stats based on client-side knowledge
-        if (fileToUpload) {
-          setServerStats({
-            size: fileToUpload.size,
-            width: 0, // We don't know the dimensions from direct upload
-            height: 0,
-            format: fileToUpload.type.split('/')[1] || 'unknown'
-          });
-        }
-
-        setUploadStatus({ success: true, message: 'Image uploaded successfully' });
-        showToast('Image uploaded successfully');
-        return true;
-      }
-
-      throw new Error('Upload returned no URL');
-    } catch (error) {
-      console.error('Direct upload failed:', error);
-      setUploadStatus({
-        success: false,
-        message: error instanceof Error ? error.message : 'Upload failed'
-      });
-      showToast('Upload failed. Please try again.');
-      return false;
     }
   };
 
@@ -556,7 +505,7 @@ export const SimpleImageUploader: React.FC<SimpleImageUploaderProps> = ({ onClie
         const urlParts = uploadedUrl.split('/');
         let filename = urlParts[urlParts.length - 1];
 
-        if (!filename.includes('.')) {
+        if (!filename?.includes('.')) {
           if (originalFile?.name) {
             const originalExt = originalFile.name.split('.').pop();
             const newExt = serverStats?.format || 'webp';
@@ -795,7 +744,7 @@ export const SimpleImageUploader: React.FC<SimpleImageUploaderProps> = ({ onClie
                 <div className="stat py-3 sm:py-5">
                   <div className="stat-title text-xs sm:text-sm font-medium opacity-80">Original</div>
                   <div className="stat-value text-base sm:text-lg">{originalSize ? formatBytes(originalSize) : 'N/A'}</div>
-                  <div className="text-xs opacity-70">{originalFile.type.split('/')[1].toUpperCase()} {originalDimensions && `${originalDimensions.width}×${originalDimensions.height}`}</div>
+                  <div className="text-xs opacity-70">{originalFile?.type?.split('/')?.[1]?.toUpperCase()} {originalDimensions && `${originalDimensions.width}×${originalDimensions.height}`}</div>
                 </div>
 
                 <div className="stat py-3 sm:py-5">
