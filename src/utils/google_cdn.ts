@@ -32,7 +32,10 @@ export class CoreImageService {
 	constructor(storage: Storage, bucketName: string, cdnUrl?: string) {
 		this.storage = storage;
 		this.bucketName = bucketName;
-		this.cdnUrl = cdnUrl || `https://storage.googleapis.com/${bucketName}`;
+		this.cdnUrl =
+			cdnUrl ||
+			process.env.CDN_BASE_URL ||
+			`https://storage.googleapis.com/${bucketName}`;
 	}
 
 	public generateHash(content: ArrayBuffer): string {
@@ -41,26 +44,27 @@ export class CoreImageService {
 		return hash.digest("hex");
 	}
 
-	public generateFileName(originalFileName: string, hash: string): string {
+	public generateFileName(originalFileName: string, hash: string) {
 		const extension = path.extname(originalFileName);
 		return `${hash}${extension}`;
 	}
 
-	public getImageUrl(imagePath: string, useCdn: boolean = true): string {
-		if (
-			useCdn &&
-			this.cdnUrl !== `https://storage.googleapis.com/${this.bucketName}`
-		) {
-			// Use CDN URL for optimized access
-			return `${this.cdnUrl}/${imagePath}`;
-		} else {
-			// Use direct storage URL
-			return `https://storage.googleapis.com/${this.bucketName}/${imagePath}`;
-		}
-	}
+	public getImageUrls(imagePath: string): ImageUrls {
+		// Extract the hash and extension from the imagePath
+		const hash = path.basename(imagePath, path.extname(imagePath));
+		const extension = path.extname(imagePath);
+		const folder = path.dirname(imagePath).replace(/\\/g, "/"); // Normalize path separators
 
-	public getGsUrl(imagePath: string): string {
-		return `gs://${this.bucketName}/${imagePath}`;
+		// Use CDN URL for all URLs
+		const objectPath = `${folder}/${hash}${extension}`;
+		const cdnUrl = `${this.cdnUrl}/${objectPath}`;
+		const directUrl = `https://storage.googleapis.com/${this.bucketName}/${objectPath}`;
+
+		return {
+			cdnUrl,
+			directUrl,
+			gsUrl: `gs://${this.bucketName}/${objectPath}`,
+		};
 	}
 
 	public async uploadImage(
@@ -79,18 +83,14 @@ export class CoreImageService {
 
 		// Generate unique filename using the complete hash
 		const uniqueFileName = this.generateFileName(path.basename(filePath), hash);
-		const destination = `${folder}/${uniqueFileName}`;
+		const destination = `${folder.replace(/\\/g, "/")}/${uniqueFileName}`; // Normalize path separators
 		const gcsFile = this.storage.bucket(this.bucketName).file(destination);
 
 		// Check if file already exists
 		const [exists] = await gcsFile.exists();
 		if (exists) {
 			console.log(`📝 File already exists with hash ${hash}`);
-			return {
-				cdnUrl: this.getImageUrl(destination, true),
-				directUrl: this.getImageUrl(destination, false),
-				gsUrl: this.getGsUrl(destination),
-			};
+			return this.getImageUrls(destination);
 		}
 
 		const imageMetadata: CoreImageMetadata = {
@@ -103,9 +103,7 @@ export class CoreImageService {
 			metadata: {
 				contentType,
 				metadata: imageMetadata,
-				contentEncoding: "gzip",
-				cacheControl:
-					"public, max-age=31536000, immutable, must-revalidate, stale-while-revalidate=86400",
+				cacheControl,
 				customMetadata: {
 					"serving-versioned": "true",
 					"cdn-cache-control": "max-age=31536000",
@@ -114,11 +112,7 @@ export class CoreImageService {
 			},
 		});
 
-		return {
-			cdnUrl: this.getImageUrl(destination, true),
-			directUrl: this.getImageUrl(destination, false),
-			gsUrl: this.getGsUrl(destination),
-		};
+		return this.getImageUrls(destination);
 	}
 
 	public async saveToLocalImage(

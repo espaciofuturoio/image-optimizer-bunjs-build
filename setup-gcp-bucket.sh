@@ -253,13 +253,6 @@ else
     print_warning "Bucket already exists, skipping creation"
 fi
 
-# Clear any previous access settings
-echo "Clearing previous access settings..."
-gcloud storage buckets update gs://$BUCKET_NAME \
-    --uniform-bucket-level-access \
-    --clear-pap
-check_status "Access settings cleared" "Failed to clear access settings"
-
 # Make bucket publicly readable
 echo "Setting up public read access..."
 gcloud storage buckets add-iam-policy-binding gs://$BUCKET_NAME \
@@ -270,7 +263,8 @@ check_status "Public read access configured" "Failed to set public read access"
 # Set bucket to public access
 echo "Configuring bucket for public access..."
 gcloud storage buckets update gs://$BUCKET_NAME \
-    --uniform-bucket-level-access
+    --uniform-bucket-level-access \
+    --no-public-access-prevention
 check_status "Bucket public access configured" "Failed to configure bucket public access"
 
 # Create service account
@@ -459,25 +453,20 @@ URL_MAP_NAME="${BUCKET_NAME//_/-}-urlmap"
 HTTP_PROXY_NAME="${BUCKET_NAME//_/-}-proxy"
 FORWARDING_RULE_NAME="${BUCKET_NAME//_/-}-rule"
 
-# Create or update backend bucket with CDN enabled
+# Create backend bucket with CDN enabled
 echo "Setting up backend bucket with CDN..."
 if gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME --global &> /dev/null; then
-    print_warning "Backend bucket exists. Skipping creation."
+    print_warning "Backend bucket exists. Updating configuration..."
+    gcloud compute backend-buckets update $BACKEND_BUCKET_NAME \
+        --enable-cdn \
+        --gcs-bucket-name=$BUCKET_NAME
+    check_status "Backend bucket updated" "Failed to update backend bucket"
 else
     print_warning "Creating new backend bucket..."
-    if ! gcloud compute backend-buckets create $BACKEND_BUCKET_NAME \
+    gcloud compute backend-buckets create $BACKEND_BUCKET_NAME \
         --gcs-bucket-name=$BUCKET_NAME \
-        --enable-cdn 2>/dev/null; then
-        # If creation fails, check if it exists again (race condition)
-        if gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME --global &> /dev/null; then
-            print_warning "Backend bucket was created by another process. Skipping creation."
-        else
-            print_error "Failed to create backend bucket"
-            exit 1
-        fi
-    else
-        print_success "Backend bucket created successfully"
-    fi
+        --enable-cdn
+    check_status "Backend bucket created" "Failed to create backend bucket"
 fi
 
 # Create or update URL map
@@ -540,6 +529,16 @@ LOAD_BALANCER_IP=$(gcloud compute forwarding-rules describe $HTTPS_FORWARDING_RU
     --global \
     --format="get(IPAddress)")
 check_status "Load balancer IP retrieved" "Failed to get load balancer IP"
+
+# Update .env file with CDN configuration
+echo "Updating .env file with CDN configuration..."
+cat > .env << EOL
+GOOGLE_CLOUD_PROJECT_ID=$PROJECT_ID
+GOOGLE_CLOUD_BUCKET_NAME=$BUCKET_NAME
+GOOGLE_CLOUD_KEY_FILE_PATH=$(pwd)/$KEY_FILE_PATH
+CDN_BASE_URL=https://$LOAD_BALANCER_IP
+EOL
+check_status "Environment file updated" "Failed to update environment file"
 
 # Set up cache policies for optimal performance
 echo "Configuring cache policies..."

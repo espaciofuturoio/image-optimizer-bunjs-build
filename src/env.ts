@@ -5,13 +5,21 @@ const envSchema = z.object({
 	UPLOAD_DIR: z.string().default("uploads"),
 	NODE_ENV: z.enum(["development", "production"]).default("production"),
 	PORT: z.coerce.number().default(3000),
+	CDN_BASE_URL: z.string().url().optional(),
 });
 
 let ENV: z.infer<typeof envSchema>;
 
 try {
 	ENV = envSchema.parse(Bun.env);
-	const { PUBLIC_SERVER_URL, UPLOAD_DIR, NODE_ENV, PORT, ...secrets } = ENV;
+	const {
+		PUBLIC_SERVER_URL,
+		UPLOAD_DIR,
+		NODE_ENV,
+		PORT,
+		CDN_BASE_URL,
+		...secrets
+	} = ENV;
 	console.log("ENVIRONMENT VARIABLES");
 	console.dir(
 		{
@@ -19,6 +27,7 @@ try {
 			UPLOAD_DIR,
 			NODE_ENV,
 			PORT,
+			CDN_BASE_URL,
 		},
 		{ depth: null },
 	);

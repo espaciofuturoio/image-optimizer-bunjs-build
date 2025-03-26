@@ -1,0 +1,68 @@
+import { createImageService } from "./src/utils/google_cdn";
+
+const service = createImageService(
+	{ keyFilePath: "./service-account.json" },
+	"reality_one_v2",
+);
+
+// Create a simple test image
+const imageData = new Uint8Array([
+	0x52,
+	0x49,
+	0x46,
+	0x46, // "RIFF"
+	0x2c,
+	0x00,
+	0x00,
+	0x00, // File size
+	0x57,
+	0x45,
+	0x42,
+	0x50, // "WEBP"
+	0x56,
+	0x50,
+	0x38,
+	0x20, // "VP8 "
+	0x1e,
+	0x00,
+	0x00,
+	0x00, // Chunk size
+	0x30,
+	0x01,
+	0x00,
+	0x9d, // VP8 header
+	0x01,
+	0x2a,
+	0x01,
+	0x00, // Width and height
+	0x01,
+	0x00,
+	0x02,
+	0x00, // More VP8 data
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+]);
+
+await Bun.write("test.webp", imageData);
+
+// Upload the test image
+const result = await service.uploadImage("test.webp", "test", {
+	contentType: "image/webp",
+	makePublic: true,
+});
+
+console.log("Uploaded test image:", result);

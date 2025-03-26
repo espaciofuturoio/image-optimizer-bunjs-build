@@ -3,12 +3,27 @@ import dotenv from "dotenv";
 import { optimizeImageWithPlaywright } from "./playwright_optimizer";
 import type { OptimizedImageResult } from "@/features/images/image_compression_util";
 import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+
+// Load environment variables from the root .env file
+const rootEnvPath = join(process.cwd(), ".env");
+dotenv.config({ path: rootEnvPath });
 
 // Set the server URL for local development
 process.env.PUBLIC_SERVER_URL = "http://localhost:3000";
-process.env.CDN_BASE_URL = "https://34.149.157.123"; // Your load balancer IP
 
-dotenv.config();
+// Validate required environment variables
+if (!process.env.CDN_BASE_URL) {
+	console.error("Error: CDN_BASE_URL environment variable is not set.");
+	console.error("Please run the setup script first:");
+	console.error("  ./validate-bucket.sh reality_one_v2");
+	process.exit(1);
+}
+
+// Extend the OptimizedImageResult type to include hash
+interface ExtendedOptimizedImageResult extends OptimizedImageResult {
+	hash: string;
+}
 
 const imageService = createImageService(
 	{
@@ -68,15 +83,48 @@ async function measureResponseStats(
 	url: string,
 ): Promise<{ timeMs: number; sizeKB: number }> {
 	const start = performance.now();
-	const response = await fetch(url);
-	const buffer = await response.arrayBuffer();
-	const end = performance.now();
+	let retries = 3;
+	let lastError: Error | null = null;
 
-	const sizeKB = buffer.byteLength / 1024;
-	return {
-		timeMs: end - start,
-		sizeKB,
-	};
+	while (retries > 0) {
+		try {
+			const response = await fetch(url, {
+				verbose: true,
+				headers: {
+					Accept: "image/webp,image/*,*/*;q=0.8",
+					"Cache-Control": "no-cache",
+				},
+			});
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			const buffer = await response.arrayBuffer();
+			const end = performance.now();
+			const sizeKB = buffer.byteLength / 1024;
+
+			return {
+				timeMs: end - start,
+				sizeKB,
+			};
+		} catch (error) {
+			lastError = error as Error;
+			console.warn(`Attempt ${4 - retries} failed:`, error);
+			retries--;
+
+			if (retries > 0) {
+				// Exponential backoff
+				await new Promise((resolve) =>
+					setTimeout(resolve, 2 ** (4 - retries) * 1000),
+				);
+			}
+		}
+	}
+
+	throw new Error(
+		`Failed to fetch image after 3 attempts. Last error: ${lastError?.message}`,
+	);
 }
 
 async function measureOptimizedImagesFetchTimes(
@@ -143,10 +191,10 @@ const createOptimizedImages = async (
 	try {
 		for (const type of types) {
 			const config = imageConfigs[type];
-			const optimizedImage = await optimizeImageWithPlaywright(imagePath, {
+			const optimizedImage = (await optimizeImageWithPlaywright(imagePath, {
 				format: "webp",
 				...config,
-			});
+			})) as ExtendedOptimizedImageResult;
 
 			if (!optimizedImage.success) {
 				throw new Error(
@@ -160,7 +208,7 @@ const createOptimizedImages = async (
 			);
 
 			// Upload the optimized image to Google Cloud Storage with real estate specific metadata
-			const url = await imageService.uploadImage(
+			const urls = await imageService.uploadImage(
 				tempFilePath,
 				`rubenabix/${type}`,
 				{
@@ -184,14 +232,14 @@ const createOptimizedImages = async (
 			);
 
 			results[type] = {
-				url: `${process.env.CDN_BASE_URL}/rubenabix/${type}`,
+				url: urls.cdnUrl,
 				originalUrl: source,
 				isRemote,
 			};
 			console.log(`\n${type} image URLs:`);
-			console.log(`  Direct URL: ${url.directUrl}`);
-			console.log(`  CDN URL: ${process.env.CDN_BASE_URL}/rubenabix/${type}`);
-			console.log(`  GS URL: ${url.gsUrl}`);
+			console.log(`  Direct URL: ${urls.directUrl}`);
+			console.log(`  CDN URL: ${urls.cdnUrl}`);
+			console.log(`  GS URL: ${urls.gsUrl}`);
 			console.log(`  Original URL: ${source}`);
 
 			// Clean up the temporary file
@@ -211,7 +259,7 @@ const createOptimizedImages = async (
 	try {
 		// Example with remote URL
 		const remoteImageUrl =
-			"https://image.wasi.co/eyJidWNrZXQiOiJzdGF0aWN3Iiwia2V5IjoiaW5tdWVibGVzXC9nMTA0MTIzMTIwMjMwMTA0MDI1NDA3LmpwZWciLCJlZGl0cyI6eyJub3JtYWxpc2UiOnRydWUsInJvdGF0ZSI6MCwicmVzaXplIjp7IndpZHRoIjo5MDAsImhlaWdodCI6Njc1LCJmaXQiOiJjb250YWluIiwiYmFja2dyb3VuZCI6eyJyIjoyNTUsImciOjI1NSwiYiI6MjU1LCJhbHBoYSI6MX19fX0=";
+			"https://image.wasi.co/eyJidWNrZXQiOiJzdGF0aWN3Iiwia2V5IjoiaW5tdWVibGVzXC9nMTA0MTIxOTIwMjMxMDMwMDUxNjM3LmpwZyIsImVkaXRzIjp7Im5vcm1hbGlzZSI6dHJ1ZSwicm90YXRlIjowLCJyZXNpemUiOnsid2lkdGgiOjkwMCwiaGVpZ2h0Ijo2NzUsImZpdCI6ImNvbnRhaW4iLCJiYWNrZ3JvdW5kIjp7InIiOjI1NSwiZyI6MjU1LCJiIjoyNTUsImFscGhhIjoxfX19fQ==";
 
 		// Specify which types of images you want to generate
 		const typesToGenerate: ImageType[] = ["thumbnail", "full", "preview"];
