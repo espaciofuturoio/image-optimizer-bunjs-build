@@ -99,6 +99,7 @@ const OPERATION_TIMEOUT_MS = 30000; // 30 seconds
 const PROGRESS_INTERVAL_MS = 5000; // 5 seconds
 const BATCH_SIZE = 5; // Number of properties to process concurrently
 const ERROR_LOG_FILE = "./processing_errors.json";
+const BROWSER_CRASH_DELAY_MS = 5000; // 5 seconds delay after browser crash
 
 const STATE_FILE = "./processing_state.json";
 const STATE_TEMP_FILE = "./processing_state.temp.json";
@@ -112,8 +113,27 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // Parse command line arguments
 const args = process.argv.slice(2);
 const forceStart = args.includes("--force");
+const quietMode = args.includes("--quiet");
 
-const atomicWrite = (filePath: string, tempPath: string, data: any) => {
+const printLog = (
+	message: string,
+	type: "info" | "warn" | "error" = "info",
+) => {
+	if (quietMode) return;
+
+	switch (type) {
+		case "warn":
+			console.warn(message);
+			break;
+		case "error":
+			console.error(message);
+			break;
+		default:
+			console.log(message);
+	}
+};
+
+const atomicWrite = (filePath: string, tempPath: string, data: unknown) => {
 	try {
 		// Write to temporary file first
 		writeFileSync(tempPath, JSON.stringify(data, null, 2));
@@ -130,7 +150,7 @@ const atomicWrite = (filePath: string, tempPath: string, data: any) => {
 
 const loadProcessingState = (): ProcessingState => {
 	if (forceStart) {
-		console.log("Force flag detected. Starting fresh...");
+		printLog("Force flag detected. Starting fresh...");
 		return {
 			processedProperties: [],
 			failedProperties: [],
@@ -144,7 +164,7 @@ const loadProcessingState = (): ProcessingState => {
 		try {
 			return JSON.parse(readFileSync(STATE_FILE, "utf-8"));
 		} catch (error) {
-			console.error("Failed to load processing state:", error);
+			printLog("Failed to load processing state:", "error");
 		}
 	}
 	return {
@@ -197,7 +217,7 @@ const retryWithBackoff = async <T>(
 		return await withTimeout(operation, OPERATION_TIMEOUT_MS);
 	} catch (error) {
 		if (retries === 0) throw error;
-		console.log(`Operation failed, retrying... (${retries} attempts left)`);
+		printLog(`Operation failed, retrying... (${retries} attempts left)`);
 		await sleep(RETRY_DELAY_MS);
 		return retryWithBackoff(operation, retries - 1);
 	}
@@ -231,11 +251,51 @@ const logError = (error: ProcessingError) => {
 		try {
 			errors = JSON.parse(readFileSync(ERROR_LOG_FILE, "utf-8"));
 		} catch (e) {
-			console.error("Failed to read error log:", e);
+			printLog("Failed to read error log:", "error");
 		}
 	}
 	errors.push(error);
 	writeFileSync(ERROR_LOG_FILE, JSON.stringify(errors, null, 2));
+};
+
+const isPlaywrightError = (error: unknown): boolean => {
+	if (error instanceof Error) {
+		return (
+			error.message.includes("Failed to connect") ||
+			error.message.includes("ENOENT") ||
+			error.message.includes("playwright-core") ||
+			error.message.includes("Browser has crashed") ||
+			error.message.includes("Browser closed unexpectedly")
+		);
+	}
+	return false;
+};
+
+const handlePlaywrightError = async (
+	error: unknown,
+	property: Property,
+	type: "cover" | "gallery",
+): Promise<void> => {
+	const errorMessage = error instanceof Error ? error.message : String(error);
+
+	// Log the error
+	logError({
+		propertyId: property.id,
+		error: `Playwright error: ${errorMessage}`,
+		timestamp: new Date().toISOString(),
+		type,
+		imageUrl: type === "cover" ? property.imageCoverPreviewUrl : undefined,
+	});
+
+	// Add a longer delay for browser crashes
+	if (
+		errorMessage.includes("Browser has crashed") ||
+		errorMessage.includes("Browser closed unexpectedly")
+	) {
+		await sleep(BROWSER_CRASH_DELAY_MS);
+	} else {
+		await sleep(RETRY_DELAY_MS * 2);
+	}
 };
 
 const processProperty = async (
@@ -243,17 +303,22 @@ const processProperty = async (
 	index: number,
 	total: number,
 ): Promise<void> => {
-	console.log(`\nProcessing property: ${property.id} (${index + 1}/${total})`);
+	printLog(`Processing property: ${property.id} (${index + 1}/${total})`);
 
 	// Process cover image
-	console.log("\nProcessing cover image...");
+	printLog("Processing cover image...");
 	try {
 		const coverResults = await retryWithBackoff(() =>
 			createOptimizedImages(property.imageCoverPreviewUrl, ["full"]),
 		);
-		console.log("\nCover image URLs:", coverResults.full.url);
+		printLog(`Cover image processed: ${coverResults.full.url}`);
 		property.imageCoverPreviewUrl = coverResults.full.url;
 	} catch (error) {
+		if (isPlaywrightError(error)) {
+			await handlePlaywrightError(error, property, "cover");
+			// Keep the original URL for Playwright errors
+			return;
+		}
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		logError({
 			propertyId: property.id,
@@ -262,26 +327,39 @@ const processProperty = async (
 			type: "cover",
 			imageUrl: property.imageCoverPreviewUrl,
 		});
-		throw new Error(`Cover image processing failed: ${errorMessage}`);
+		// Instead of throwing, just log and continue
+		printLog(
+			`Cover image processing failed for property ${property.id}: ${errorMessage}`,
+			"error",
+		);
+		return;
 	}
 
 	// Process gallery images
-	console.log("\nProcessing gallery images...");
+	printLog("Processing gallery images...");
 	const optimizedGalleryImages: string[] = [];
 	const failedGalleryImages: { index: number; url: string; error: string }[] =
 		[];
 
 	for (const [index, galleryImage] of property.galleryImages.entries()) {
-		console.log(
-			`\nProcessing gallery image ${index + 1}/${property.galleryImages.length}...`,
+		printLog(
+			`Processing gallery image ${index + 1}/${property.galleryImages.length}...`,
 		);
 		try {
 			const galleryResults = await retryWithBackoff(() =>
 				createOptimizedImages(galleryImage, ["full"]),
 			);
-			console.log(`Gallery image ${index + 1} URLs:`, galleryResults.full.url);
+			printLog(
+				`Gallery image ${index + 1} processed: ${galleryResults.full.url}`,
+			);
 			optimizedGalleryImages.push(galleryResults.full.url);
 		} catch (error) {
+			if (isPlaywrightError(error)) {
+				await handlePlaywrightError(error, property, "gallery");
+				// Keep the original URL for Playwright errors
+				optimizedGalleryImages.push(galleryImage);
+				continue;
+			}
 			const errorMessage =
 				error instanceof Error ? error.message : String(error);
 			logError({
@@ -301,21 +379,16 @@ const processProperty = async (
 		}
 	}
 
-	// Update gallery images with optimized ones (or original ones if optimization failed)
 	property.galleryImages = optimizedGalleryImages;
-
-	// If all gallery images failed, throw an error
-	if (failedGalleryImages.length === property.galleryImages.length) {
-		throw new Error(`All gallery images failed for property ${property.id}`);
-	}
 
 	// Log summary of failed gallery images if any
 	if (failedGalleryImages.length > 0) {
-		console.warn(
-			`\nWarning: ${failedGalleryImages.length} gallery images failed for property ${property.id}`,
+		printLog(
+			`Warning: ${failedGalleryImages.length} gallery images failed for property ${property.id}`,
+			"warn",
 		);
 		for (const { index, error } of failedGalleryImages) {
-			console.warn(`- Image ${index + 1}: ${error}`);
+			printLog(`- Image ${index + 1}: ${error}`, "warn");
 		}
 	}
 };
@@ -345,9 +418,9 @@ const processBatch = async (
 					timestamp: new Date().toISOString(),
 					type: "property",
 				});
-				console.error(
-					`Failed to process property ${property.id}:`,
-					errorMessage,
+				printLog(
+					`Failed to process property ${property.id}: ${errorMessage}`,
+					"error",
 				);
 				state.failedProperties.push(property);
 				state.processedProperties.push(property.id);
@@ -370,47 +443,40 @@ const processBatch = async (
 	let properties: Property[] = [];
 
 	try {
-		// Read properties from JSON file
 		properties = JSON.parse(readFileSync("./properties.json", "utf-8"));
-
-		// Load previous processing state
 		state = loadProcessingState();
+
 		if (!forceStart) {
-			console.log(`Resuming from index ${state.lastProcessedIndex + 1}`);
+			printLog(`Resuming from index ${state.lastProcessedIndex + 1}`);
 		} else {
-			console.log("Starting from beginning...");
+			printLog("Starting from beginning...");
 		}
 
-		// Start progress interval
 		const progressInterval = setInterval(() => {
 			printProgress(state, properties.length);
 		}, PROGRESS_INTERVAL_MS);
 
-		// Process properties in batches
 		for (
 			let i = state.lastProcessedIndex + 1;
 			i < properties.length;
 			i += BATCH_SIZE
 		) {
 			await processBatch(properties, i, BATCH_SIZE, state);
-
-			// Save intermediate results after each batch
 			saveIntermediateResults(properties, i, state.failedProperties);
 		}
 
-		// Clear progress interval
 		clearInterval(progressInterval);
 
-		console.log("\nProcessing completed!");
+		printLog("\nProcessing completed!");
 		printProgress(state, properties.length);
-		console.log(
+		printLog(
 			"Results saved to optimized_properties.json and failed_properties.json",
 		);
 		process.exit(0);
 	} catch (error) {
-		console.error("Failed to process images:", error);
+		printLog("Failed to process images:", "error");
 		printProgress(state, properties.length);
-		console.log(
+		printLog(
 			"\nScript interrupted. You can resume later by running the script again.",
 		);
 	}
