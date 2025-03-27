@@ -108,40 +108,109 @@ gcloud config set project YOUR_PROJECT_ID
 
 ## Managing GCP Buckets
 
-The project includes a utility script to manage Google Cloud Storage buckets:
+The project includes utility scripts to manage Google Cloud Storage buckets and CDN configuration:
 
+### 1. Setup Bucket with CDN
+```bash
+./setup-gcp-bucket.sh <bucket-name> [--delete] [--force] [--domain=your-domain.com]
+```
+
+Options:
+- `--delete`: Delete existing resources before setup
+- `--force`: Force recreation of existing resources
+- `--domain`: Configure a custom domain for the CDN
+
+### 2. Manage Buckets and Domains
 ```bash
 ./manage-gcp-buckets.sh
 ```
 
 This script provides the following options:
-1. List and remove buckets
-2. Quit
+1. List and manage storage buckets
+2. List and manage backend buckets
+3. Show detailed bucket information
+4. Remove ALL resources (⚠️ DANGEROUS)
+5. Manage custom domains
 
-When listing buckets, you can:
-- View all available buckets
-- Select a bucket by number to remove it
-- Confirm deletion by typing the full bucket name
-- Cancel the operation at any time by entering 'q'
-
-Example usage:
+### 3. Validate Bucket Configuration
 ```bash
-🚀 GCP Bucket Manager
-1. List and remove buckets
-q. Quit
-Choose an option: 1
-
-📦 Listing all buckets...
-
-Available buckets:
-1. bucket-name-1
-2. bucket-name-2
-3. bucket-name-3
-
-Select a bucket number to remove (or 'q' to quit):
+./validate-bucket.sh <bucket-name> [--domain=your-domain.com]
 ```
 
-⚠️ Warning: Bucket deletion is permanent and will remove all contents. Make sure to back up any important data before deletion.
+This script validates and fixes:
+- Bucket IAM permissions
+- Bucket settings
+- CDN configuration
+- SSL certificates
+- DNS configuration
+- Custom domain setup
+
+## Domain Management
+
+### Setting Up Custom Domains
+
+1. During initial setup:
+```bash
+./setup-gcp-bucket.sh your-bucket-name --domain=cdn.yourdomain.com
+```
+
+2. For existing buckets:
+```bash
+./manage-gcp-buckets.sh
+```
+Then select option 5 to:
+- Add new domains
+- List existing domains
+- Remove domains
+- Check DNS configuration
+
+### DNS Configuration
+
+When setting up a custom domain, you'll need to:
+
+1. Add an A record to your DNS settings:
+   ```
+   Type: A
+   Name: cdn.yourdomain.com
+   Value: <load-balancer-ip>
+   TTL: 3600 (or automatic)
+   ```
+
+2. Wait for DNS propagation (usually 5-15 minutes)
+
+3. Wait for SSL certificate provisioning (up to 30 minutes)
+
+### Domain Validation
+
+To validate your domain configuration:
+```bash
+./validate-bucket.sh your-bucket-name --domain=cdn.yourdomain.com
+```
+
+This will check:
+- DNS configuration
+- SSL certificate status
+- CDN setup
+- Domain propagation
+
+### Troubleshooting Domains
+
+Common issues and solutions:
+
+1. **SSL Certificate Issues**
+   - Wait up to 30 minutes for certificate provisioning
+   - Check certificate status in Cloud Console
+   - Verify domain ownership
+
+2. **DNS Issues**
+   - Verify A record configuration
+   - Check DNS propagation (can take 5-15 minutes)
+   - Ensure domain matches SSL certificate
+
+3. **CDN Issues**
+   - Verify backend bucket configuration
+   - Check URL map settings
+   - Validate forwarding rules
 
 ## Environment Variables
 

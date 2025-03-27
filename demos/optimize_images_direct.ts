@@ -138,6 +138,10 @@ async function optimizeImageDirect(
 			`${colors.blue}CDN URL:${colors.reset} ${colors.yellow}${uploadResult.cdnUrl}${colors.reset}`,
 		);
 
+		console.log(
+			`${colors.blue}GS URL:${colors.reset} ${colors.yellow}${uploadResult.gsUrl}${colors.reset}`,
+		);
+
 		return {
 			imageUrl,
 			originalSize,

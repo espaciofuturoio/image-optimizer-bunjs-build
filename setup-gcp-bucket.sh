@@ -3,13 +3,14 @@
 # Check if bucket name is provided
 if [ -z "$1" ]; then
     echo "Error: Please provide a bucket name"
-    echo "Usage: ./setup-gcp-bucket.sh <bucket-name> [--delete] [--force]"
+    echo "Usage: ./setup-gcp-bucket.sh <bucket-name> [--delete] [--force] [--domain=your-domain.com]"
     exit 1
 fi
 
 BUCKET_NAME=$1
 DELETE_FLAG=$2
 FORCE_FLAG=$3
+DOMAIN_FLAG=$4
 PROJECT_ID="naye-tours"
 LOCATION="us-central1"
 SERVICE_ACCOUNT_NAME="real-estate-services"
@@ -17,6 +18,12 @@ SERVICE_ACCOUNT_DISPLAY_NAME="Real Estate Services Account"
 SERVICE_ACCOUNT_DESCRIPTION="Service account for real estate image processing"
 KEY_FILE_NAME="storage-service-account.json"
 KEY_FILE_PATH="src/utils/$KEY_FILE_NAME"
+
+# Extract domain from flag if provided
+CUSTOM_DOMAIN=""
+if [[ $DOMAIN_FLAG == "--domain="* ]]; then
+    CUSTOM_DOMAIN=${DOMAIN_FLAG#--domain=}
+fi
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -509,6 +516,12 @@ fi
 echo "Setting up SSL certificate..."
 CERT_NAME="${BUCKET_NAME//_/-}-cert"
 CERT_DOMAIN="${BUCKET_NAME//_/-}.storage.googleapis.com"
+
+# Add custom domain to certificate if provided
+if [ ! -z "$CUSTOM_DOMAIN" ]; then
+    CERT_DOMAIN="$CERT_DOMAIN,$CUSTOM_DOMAIN"
+fi
+
 if gcloud compute ssl-certificates describe $CERT_NAME --global &> /dev/null; then
     print_warning "SSL certificate exists. Updating configuration..."
     gcloud compute ssl-certificates update $CERT_NAME \
@@ -599,10 +612,15 @@ echo -e "\n${GREEN}📡 CDN Information:${NC}"
 echo "----------------------------------------"
 echo "Load Balancer IP: $LOAD_BALANCER_IP"
 echo "CDN Base URL: https://$LOAD_BALANCER_IP"
-echo "Example URLs:"
-echo "  - Thumbnail: https://$LOAD_BALANCER_IP/rubenabix/thumbnail"
-echo "  - Full: https://$LOAD_BALANCER_IP/rubenabix/full"
-echo "  - Preview: https://$LOAD_BALANCER_IP/rubenabix/preview"
+if [ ! -z "$CUSTOM_DOMAIN" ]; then
+    echo "Custom Domain: https://$CUSTOM_DOMAIN"
+    echo -e "\n${YELLOW}⚠️  DNS Configuration Required:${NC}"
+    echo "Add an A record to your DNS settings:"
+    echo "  Type: A"
+    echo "  Name: $CUSTOM_DOMAIN"
+    echo "  Value: $LOAD_BALANCER_IP"
+    echo "  TTL: 3600 (or automatic)"
+fi
 echo "----------------------------------------"
 echo -e "\n${YELLOW}⚠️  Note: Wait a few minutes for SSL certificate to propagate${NC}"
 

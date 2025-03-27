@@ -3,17 +3,24 @@
 # Check if bucket name is provided
 if [ -z "$1" ]; then
     echo "Error: Please provide a bucket name"
-    echo "Usage: ./validate-bucket.sh <bucket-name>"
+    echo "Usage: ./validate-bucket.sh <bucket-name> [--domain=your-domain.com]"
     exit 1
 fi
 
 BUCKET_NAME=$1
+DOMAIN_FLAG=$2
 PROJECT_ID="naye-tours"
 BACKEND_BUCKET_NAME="${BUCKET_NAME//_/-}-backend"
 URL_MAP_NAME="${BUCKET_NAME//_/-}-urlmap"
 HTTPS_PROXY_NAME="${BUCKET_NAME//_/-}-https-proxy"
 HTTPS_FORWARDING_RULE_NAME="${BUCKET_NAME//_/-}-https-rule"
 CERT_NAME="${BUCKET_NAME//_/-}-cert"
+
+# Extract domain from flag if provided
+CUSTOM_DOMAIN=""
+if [[ $DOMAIN_FLAG == "--domain="* ]]; then
+    CUSTOM_DOMAIN=${DOMAIN_FLAG#--domain=}
+fi
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -142,12 +149,75 @@ validate_ssl_certificate() {
     
     if ! gcloud compute ssl-certificates describe $CERT_NAME 2>/dev/null; then
         print_warning "SSL certificate does not exist. Creating..."
+        CERT_DOMAIN="${BUCKET_NAME//_/-}.storage.googleapis.com"
+        if [ ! -z "$CUSTOM_DOMAIN" ]; then
+            CERT_DOMAIN="$CERT_DOMAIN,$CUSTOM_DOMAIN"
+        fi
         gcloud compute ssl-certificates create $CERT_NAME \
-            --domains="${BUCKET_NAME//_/-}.storage.googleapis.com" \
+            --domains=$CERT_DOMAIN \
             --global
         check_status "SSL certificate created" "Failed to create SSL certificate"
     else
         print_success "SSL certificate exists"
+        
+        # Check if custom domain is included in certificate
+        if [ ! -z "$CUSTOM_DOMAIN" ]; then
+            current_domains=$(gcloud compute ssl-certificates describe $CERT_NAME --global --format="get(managed.domains)")
+            if [[ ! "$current_domains" == *"$CUSTOM_DOMAIN"* ]]; then
+                print_warning "Custom domain not in certificate. Adding..."
+                new_domains="$current_domains,$CUSTOM_DOMAIN"
+                gcloud compute ssl-certificates update $CERT_NAME \
+                    --domains=$new_domains \
+                    --global
+                check_status "Custom domain added to certificate" "Failed to add custom domain to certificate"
+            else
+                print_success "Custom domain properly configured in certificate"
+            fi
+        fi
+    fi
+}
+
+# Function to validate domain DNS configuration
+validate_domain_dns() {
+    if [ ! -z "$CUSTOM_DOMAIN" ]; then
+        echo "Validating domain DNS configuration..."
+        
+        # Get the load balancer IP
+        LOAD_BALANCER_IP=$(gcloud compute forwarding-rules describe $HTTPS_FORWARDING_RULE_NAME \
+            --global \
+            --format="get(IPAddress)")
+        
+        if [ ! -z "$LOAD_BALANCER_IP" ]; then
+            # Check DNS resolution
+            echo "Checking DNS resolution for $CUSTOM_DOMAIN..."
+            DNS_IP=$(dig $CUSTOM_DOMAIN +short)
+            
+            if [ ! -z "$DNS_IP" ]; then
+                if [ "$DNS_IP" == "$LOAD_BALANCER_IP" ]; then
+                    print_success "DNS configuration is correct"
+                else
+                    print_warning "DNS configuration mismatch"
+                    echo "Current DNS IP: $DNS_IP"
+                    echo "Expected IP: $LOAD_BALANCER_IP"
+                    echo -e "\n${YELLOW}⚠️  DNS Configuration Required:${NC}"
+                    echo "Update your DNS A record:"
+                    echo "  Type: A"
+                    echo "  Name: $CUSTOM_DOMAIN"
+                    echo "  Value: $LOAD_BALANCER_IP"
+                    echo "  TTL: 3600 (or automatic)"
+                fi
+            else
+                print_warning "No DNS record found for $CUSTOM_DOMAIN"
+                echo -e "\n${YELLOW}⚠️  DNS Configuration Required:${NC}"
+                echo "Add an A record to your DNS settings:"
+                echo "  Type: A"
+                echo "  Name: $CUSTOM_DOMAIN"
+                echo "  Value: $LOAD_BALANCER_IP"
+                echo "  TTL: 3600 (or automatic)"
+            fi
+        else
+            print_error "Failed to get load balancer IP"
+        fi
     fi
 }
 
@@ -223,6 +293,7 @@ validate_url_map
 validate_ssl_certificate
 validate_https_proxy
 validate_forwarding_rule
+validate_domain_dns
 
 # Get and display the load balancer IP
 echo "Getting load balancer IP..."
@@ -281,6 +352,9 @@ print_success "🎉 Bucket configuration validation completed!"
 echo -e "\n${GREEN}📡 CDN Information:${NC}"
 echo "----------------------------------------"
 echo "Load Balancer IP: $LOAD_BALANCER_IP"
+if [ ! -z "$CUSTOM_DOMAIN" ]; then
+    echo "Custom Domain: https://$CUSTOM_DOMAIN"
+fi
 echo "CDN Base URL: https://$LOAD_BALANCER_IP"
 echo "Example URLs:"
 echo "  - Thumbnail: https://$LOAD_BALANCER_IP/rubenabix/thumbnail/{file_hash}"

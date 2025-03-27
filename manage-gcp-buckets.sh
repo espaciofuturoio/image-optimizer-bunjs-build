@@ -212,6 +212,152 @@ remove_all_resources() {
     print_success "All resources removed successfully"
 }
 
+# Function to manage custom domains
+manage_custom_domains() {
+    echo "🌐 Custom Domain Management"
+    echo "1. Add a custom domain"
+    echo "2. List custom domains"
+    echo "3. Remove a custom domain"
+    echo "4. Check domain DNS configuration"
+    echo "q. Back to main menu"
+    echo "Choose an option:"
+    read option
+
+    case $option in
+        1)
+            echo "Enter the custom domain (e.g., cdn.yourdomain.com):"
+            read domain
+            
+            # Get the current backend bucket
+            echo "Select a backend bucket to add the domain to:"
+            backend_buckets=($(gcloud compute backend-buckets list --format="value(name)"))
+            for i in "${!backend_buckets[@]}"; do
+                echo "$((i+1)). ${backend_buckets[$i]}"
+            done
+            read bucket_selection
+            
+            if [[ "$bucket_selection" =~ ^[0-9]+$ ]] && [ "$bucket_selection" -ge 1 ] && [ "$bucket_selection" -le ${#backend_buckets[@]} ]; then
+                selected_bucket="${backend_buckets[$((bucket_selection-1))]}"
+                
+                # Get the current certificate name
+                cert_name=$(gcloud compute ssl-certificates list --filter="name~${selected_bucket%-backend}-cert" --format="value(name)")
+                
+                if [ ! -z "$cert_name" ]; then
+                    # Update the SSL certificate with the new domain
+                    current_domains=$(gcloud compute ssl-certificates describe $cert_name --global --format="get(managed.domains)")
+                    new_domains="$current_domains,$domain"
+                    
+                    echo "Updating SSL certificate with new domain..."
+                    gcloud compute ssl-certificates update $cert_name \
+                        --domains=$new_domains \
+                        --global
+                    
+                    if [ $? -eq 0 ]; then
+                        print_success "Domain added successfully"
+                        echo -e "\n${YELLOW}⚠️  DNS Configuration Required:${NC}"
+                        echo "Add an A record to your DNS settings:"
+                        echo "  Type: A"
+                        echo "  Name: $domain"
+                        echo "  Value: $(gcloud compute forwarding-rules describe ${selected_bucket%-backend}-https-rule --global --format="get(IPAddress)")"
+                        echo "  TTL: 3600 (or automatic)"
+                    else
+                        print_error "Failed to add domain"
+                    fi
+                else
+                    print_error "SSL certificate not found for this backend bucket"
+                fi
+            else
+                print_error "Invalid selection"
+            fi
+            ;;
+        2)
+            echo "Listing custom domains for all backend buckets..."
+            backend_buckets=($(gcloud compute backend-buckets list --format="value(name)"))
+            for bucket in "${backend_buckets[@]}"; do
+                cert_name=$(gcloud compute ssl-certificates list --filter="name~${bucket%-backend}-cert" --format="value(name)")
+                if [ ! -z "$cert_name" ]; then
+                    echo -e "\n${GREEN}Backend Bucket: $bucket${NC}"
+                    gcloud compute ssl-certificates describe $cert_name --global --format="table(name,managed.domains,managed.status)"
+                fi
+            done
+            ;;
+        3)
+            echo "Select a backend bucket to remove domain from:"
+            backend_buckets=($(gcloud compute backend-buckets list --format="value(name)"))
+            for i in "${!backend_buckets[@]}"; do
+                echo "$((i+1)). ${backend_buckets[$i]}"
+            done
+            read bucket_selection
+            
+            if [[ "$bucket_selection" =~ ^[0-9]+$ ]] && [ "$bucket_selection" -ge 1 ] && [ "$bucket_selection" -le ${#backend_buckets[@]} ]; then
+                selected_bucket="${backend_buckets[$((bucket_selection-1))]}"
+                cert_name=$(gcloud compute ssl-certificates list --filter="name~${selected_bucket%-backend}-cert" --format="value(name)")
+                
+                if [ ! -z "$cert_name" ]; then
+                    current_domains=$(gcloud compute ssl-certificates describe $cert_name --global --format="get(managed.domains)")
+                    echo "Current domains:"
+                    echo $current_domains | tr ',' '\n' | nl
+                    
+                    echo "Enter the number of the domain to remove:"
+                    read domain_selection
+                    
+                    if [[ "$domain_selection" =~ ^[0-9]+$ ]]; then
+                        domains_array=($(echo $current_domains | tr ',' ' '))
+                        if [ "$domain_selection" -ge 1 ] && [ "$domain_selection" -le ${#domains_array[@]} ]; then
+                            domain_to_remove="${domains_array[$((domain_selection-1))]}"
+                            new_domains=$(echo $current_domains | sed "s/$domain_to_remove,//" | sed "s/,$domain_to_remove//" | sed "s/$domain_to_remove//")
+                            
+                            echo "Updating SSL certificate..."
+                            gcloud compute ssl-certificates update $cert_name \
+                                --domains=$new_domains \
+                                --global
+                            
+                            if [ $? -eq 0 ]; then
+                                print_success "Domain removed successfully"
+                            else
+                                print_error "Failed to remove domain"
+                            fi
+                        else
+                            print_error "Invalid domain selection"
+                        fi
+                    else
+                        print_error "Invalid input"
+                    fi
+                else
+                    print_error "SSL certificate not found for this backend bucket"
+                fi
+            else
+                print_error "Invalid selection"
+            fi
+            ;;
+        4)
+            echo "Enter the domain to check:"
+            read domain
+            
+            echo "Checking DNS configuration for $domain..."
+            echo "Running dig command..."
+            dig $domain +short
+            
+            echo -e "\nChecking SSL certificate status..."
+            cert_name=$(gcloud compute ssl-certificates list --filter="managed.domains:$domain" --format="value(name)")
+            if [ ! -z "$cert_name" ]; then
+                gcloud compute ssl-certificates describe $cert_name --global --format="table(name,managed.domains,managed.status)"
+            else
+                print_error "No SSL certificate found for this domain"
+            fi
+            ;;
+        q)
+            return
+            ;;
+        *)
+            print_error "Invalid option"
+            ;;
+    esac
+    
+    echo -e "\nPress Enter to continue..."
+    read
+}
+
 # Main menu
 while true; do
     echo -e "\n🚀 GCP Bucket Manager"
@@ -219,6 +365,7 @@ while true; do
     echo "2. List and manage backend buckets"
     echo "3. Show detailed bucket information"
     echo "4. Remove ALL resources (⚠️  DANGEROUS)"
+    echo "5. Manage custom domains"
     echo "q. Quit"
     echo "Choose an option:"
     read option
@@ -235,6 +382,9 @@ while true; do
             ;;
         4)
             remove_all_resources
+            ;;
+        5)
+            manage_custom_domains
             ;;
         q)
             echo "Exiting..."

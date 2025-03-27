@@ -1,0 +1,27 @@
+{
+  "displayName": "CDN High Latency Alert",
+  "conditions": [
+    {
+      "displayName": "High Latency",
+      "conditionThreshold": {
+        "filter": "metric.type=\"compute.googleapis.com/backend/latency\" resource.type=\"https_lb_rule\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_PERCENTILE_95"
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 500,
+        "duration": "300s",
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "alertStrategy": {
+    "autoClose": "604800s"
+  },
+  "combiner": "OR"
+}
