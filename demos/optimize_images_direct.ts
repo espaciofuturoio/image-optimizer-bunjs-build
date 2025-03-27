@@ -134,6 +134,9 @@ async function optimizeImageDirect(
 		console.log(
 			`${colors.blue}Direct URL:${colors.reset} ${colors.yellow}${uploadResult.directUrl}${colors.reset}`,
 		);
+		console.log(
+			`${colors.blue}CDN URL:${colors.reset} ${colors.yellow}${uploadResult.cdnUrl}${colors.reset}`,
+		);
 
 		return {
 			imageUrl,
@@ -522,9 +525,10 @@ async function main() {
 			imageCoverPreviewUrl:
 				urlReplacements.get(property.imageCoverPreviewUrl) ||
 				property.imageCoverPreviewUrl,
-			galleryImages: property.galleryImages.map(
-				(url: string) => urlReplacements.get(url) || url,
-			),
+			galleryImages:
+				property.galleryImages?.map(
+					(url: string) => urlReplacements.get(url) || url,
+				) || [],
 		}));
 
 		// Save updated properties
