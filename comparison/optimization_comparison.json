@@ -1,0 +1,29 @@
+{
+  "individualResults": [
+    {
+      "propertyId": "id-nh4tqzt",
+      "imageUrl": "/Users/ruben/Documents/projects/espaciofuturoio/image-optimizer-bunjs-build/demos/pexels-dreamypixel-552785.jpg",
+      "originalSize": 0,
+      "playwrightOptimizedSize": 0,
+      "directOptimizedSize": 0,
+      "playwrightProcessingTime": 0,
+      "directProcessingTime": 0,
+      "playwrightCompressionRatio": 0,
+      "directCompressionRatio": 0,
+      "success": false,
+      "error": "fetch() URL is invalid"
+    }
+  ],
+  "averages": {
+    "totalImages": 1,
+    "successfulImages": 0,
+    "failedImages": 1,
+    "averageOriginalSize": null,
+    "averagePlaywrightSize": null,
+    "averageDirectSize": null,
+    "averagePlaywrightTime": null,
+    "averageDirectTime": null,
+    "averagePlaywrightCompression": null,
+    "averageDirectCompression": null
+  }
+}
