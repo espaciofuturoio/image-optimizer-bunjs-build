@@ -22,6 +22,7 @@
 		"heic-convert": "^2.1.0",
 		"nanoid": "^5.1.5",
 		"playwright": "^1.51.1",
+		"qlimit": "^0.1.1",
 		"react": "^19",
 		"react-dom": "^19",
 		"tailwindcss": "^4.0.16",

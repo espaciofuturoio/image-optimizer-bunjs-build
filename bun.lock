@@ -14,6 +14,7 @@
         "heic-convert": "^2.1.0",
         "nanoid": "^5.1.5",
         "playwright": "^1.51.1",
+        "qlimit": "^0.1.1",
         "react": "^19",
         "react-dom": "^19",
         "tailwindcss": "^4.0.16",
@@ -207,6 +208,10 @@
     "playwright-core": ["playwright-core@1.51.1", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-/crRMj8+j/Nq5s8QcvegseuyeZPxpQCZb6HNk3Sos3BlZyAknRjoyJPFWkpNn8v0+P3WiwqFF8P+zQo4eqiNuw=="],
 
     "pngjs": ["pngjs@6.0.0", "", {}, "sha512-TRzzuFRRmEoSW/p1KVAmiOgPco2Irlah+bGFCeNfJXxxYGwSw7YwAOAcd7X28K/m5bjBWKsC29KyoMfHbypayg=="],
+
+    "q": ["q@1.5.1", "", {}, "sha512-kV/CThkXo6xyFEZUugw/+pIOywXcDbFYgSct5cT3gqlbkBE1SJdwy6UQoZvodiWF/ckQLZyDE/Bu1M6gVu5lVw=="],
+
+    "qlimit": ["qlimit@0.1.1", "", { "dependencies": { "q": "^1.0.0" } }, "sha512-RDGvHOCPpSTxPL3d7yDDiQ0OSCJN4RkT7JcNCPvml5ilRiCss/R++aF82vprrSVmB/vfocLCvVWudi7MsxqMNA=="],
 
     "react": ["react@19.0.0", "", {}, "sha512-V8AVnmPIICiWpGfm6GLzCR/W5FXLchHop40W4nXBmdlEceh16rCN8O8LNWm5bh5XUX91fh7KpA+W0TgMKmgTpQ=="],
 
