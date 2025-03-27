@@ -272,37 +272,45 @@ The setup includes several optimizations for low latency content delivery:
 
 ### 1. Global Edge Caching
 - Content cached at Google's edge locations worldwide
-- Users served from nearest edge location
+- Users served from the nearest edge location
 - 50-80% latency reduction compared to direct bucket access
 - Automatic failover and health checking
 
 ### 2. Cache Optimization
 - Long-term caching (1 year) for static content
-- Immutable cache policy
-- Stale-while-revalidate strategy
-- Optimized Cache-Control headers
+- Immutable cache policy prevents unnecessary revalidation
+- Stale-while-revalidate strategy for optimal performance
+- Cache-Control headers optimized for image delivery
+- Negative caching for efficient 404 handling
+- Optimized TTL settings for all response codes
 
 ### 3. Compression
-- Gzip compression for text-based content
-- Automatic image optimization
-- 60-80% size reduction for text
-- 20-40% size reduction for images
+- Automatic compression enabled for eligible content
+- Vary: Accept-Encoding header for proper caching
+- Content-specific optimizations
+- Reduced bandwidth usage and transfer time
 
-### 4. Load Balancing
-- Global load balancing
-- Intelligent request routing
-- Automatic failover
-- Health checking
+### 4. Media Delivery Optimizations
+- Accept-Ranges: bytes header for video streaming
+- Proper CORS configuration for media resources
+- Headers optimized for Range requests
+- Support for byte-range requests for video streaming
+- Optimized for HLS/DASH media streaming
 
-### 5. Performance Monitoring
+### 5. Load Balancing
+- Global load balancing for optimal routing
+- Intelligent request routing based on user location
+- Reduces server load and improves reliability
+
+### 6. Performance Monitoring
 - Real-time latency tracking
 - Request count monitoring
 - Cache hit ratio tracking
-- Automatic optimization
+- Automatic performance optimization
 
-## Performance Metrics
+### Performance Metrics
 
-### Expected Improvements
+Expected improvements:
 
 1. **Latency**
    - Direct bucket access: 100-300ms
@@ -314,10 +322,10 @@ The setup includes several optimizations for low latency content delivery:
    - CDN: Distributed across global edge network
    - Improvement: 10x+ higher concurrent requests
 
-3. **Cost Efficiency**
-   - Reduced bandwidth usage
-   - Lower origin server load
-   - Better resource utilization
+3. **Video Streaming**
+   - Smoother playback with lower buffering
+   - Support for seeking within videos
+   - Adaptive quality based on network conditions
 
 ## Security Features
 

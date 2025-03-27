@@ -467,10 +467,17 @@ if gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME --global &> /dev
     gcloud compute backend-buckets update $BACKEND_BUCKET_NAME \
         --enable-cdn \
         --gcs-bucket-name=$BUCKET_NAME \
-        --custom-response-header="Cache-Control: public, max-age=31536000, immutable, must-revalidate, stale-while-revalidate=86400" \
+        --compression-mode=AUTOMATIC \
+        --negative-caching \
+        --default-ttl=31536000 \
+        --max-ttl=31536000 \
+        --client-ttl=31536000 \
+        --custom-response-header="Cache-Control: public, max-age=31536000, immutable, stale-while-revalidate=86400" \
+        --custom-response-header="Vary: Accept-Encoding" \
+        --custom-response-header="Accept-Ranges: bytes" \
         --custom-response-header="Access-Control-Allow-Origin: *" \
         --custom-response-header="Access-Control-Allow-Methods: GET, HEAD, OPTIONS" \
-        --custom-response-header="Access-Control-Allow-Headers: Range, Origin, Accept-Encoding" \
+        --custom-response-header="Access-Control-Allow-Headers: Range, Origin, Accept-Encoding, Content-Type" \
         --custom-response-header="Access-Control-Expose-Headers: Content-Length, Content-Range" \
         --custom-response-header="Strict-Transport-Security: max-age=31536000; includeSubDomains; preload" \
         --custom-response-header="X-Content-Type-Options: nosniff" \
@@ -478,16 +485,23 @@ if gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME --global &> /dev
         --custom-response-header="X-XSS-Protection: 1; mode=block" \
         --custom-response-header="Referrer-Policy: strict-origin-when-cross-origin" \
         --custom-response-header="Content-Security-Policy: default-src 'self' https://*.googleapis.com https://*.google.com; img-src 'self' https://*.googleapis.com https://*.google.com data:; style-src 'self' 'unsafe-inline' https://*.googleapis.com https://*.google.com; font-src 'self' https://*.googleapis.com https://*.google.com data:;"
-    check_status "Backend bucket updated" "Failed to update backend bucket"
+    check_status "Backend bucket updated with optimized settings" "Failed to update backend bucket"
 else
     print_warning "Creating new backend bucket..."
     if gcloud compute backend-buckets create $BACKEND_BUCKET_NAME \
         --gcs-bucket-name=$BUCKET_NAME \
         --enable-cdn \
-        --custom-response-header="Cache-Control: public, max-age=31536000, immutable, must-revalidate, stale-while-revalidate=86400" \
+        --compression-mode=AUTOMATIC \
+        --negative-caching \
+        --default-ttl=31536000 \
+        --max-ttl=31536000 \
+        --client-ttl=31536000 \
+        --custom-response-header="Cache-Control: public, max-age=31536000, immutable, stale-while-revalidate=86400" \
+        --custom-response-header="Vary: Accept-Encoding" \
+        --custom-response-header="Accept-Ranges: bytes" \
         --custom-response-header="Access-Control-Allow-Origin: *" \
         --custom-response-header="Access-Control-Allow-Methods: GET, HEAD, OPTIONS" \
-        --custom-response-header="Access-Control-Allow-Headers: Range, Origin, Accept-Encoding" \
+        --custom-response-header="Access-Control-Allow-Headers: Range, Origin, Accept-Encoding, Content-Type" \
         --custom-response-header="Access-Control-Expose-Headers: Content-Length, Content-Range" \
         --custom-response-header="Strict-Transport-Security: max-age=31536000; includeSubDomains; preload" \
         --custom-response-header="X-Content-Type-Options: nosniff" \
@@ -495,7 +509,7 @@ else
         --custom-response-header="X-XSS-Protection: 1; mode=block" \
         --custom-response-header="Referrer-Policy: strict-origin-when-cross-origin" \
         --custom-response-header="Content-Security-Policy: default-src 'self' https://*.googleapis.com https://*.google.com; img-src 'self' https://*.googleapis.com https://*.google.com data:; style-src 'self' 'unsafe-inline' https://*.googleapis.com https://*.google.com; font-src 'self' https://*.googleapis.com https://*.google.com data:;"; then
-        check_status "Backend bucket created" "Failed to create backend bucket"
+        check_status "Backend bucket created with optimized settings" "Failed to create backend bucket"
     else
         print_warning "Backend bucket already exists, skipping creation"
     fi

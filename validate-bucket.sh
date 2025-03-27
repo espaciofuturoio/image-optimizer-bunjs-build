@@ -103,19 +103,87 @@ validate_backend_bucket() {
             print_warning "CDN not enabled for backend bucket. Fixing..."
             gcloud compute backend-buckets update $BACKEND_BUCKET_NAME \
                 --enable-cdn \
-                --custom-response-header="Cache-Control: public, max-age=31536000, immutable" \
+                --compression-mode=AUTOMATIC \
+                --negative-caching \
+                --default-ttl=31536000 \
+                --max-ttl=31536000 \
+                --client-ttl=31536000 \
+                --custom-response-header="Cache-Control: public, max-age=31536000, immutable, stale-while-revalidate=86400" \
+                --custom-response-header="Vary: Accept-Encoding" \
+                --custom-response-header="Accept-Ranges: bytes" \
                 --custom-response-header="Access-Control-Allow-Origin: *" \
-                --custom-response-header="Strict-Transport-Security: max-age=31536000; includeSubDomains"
-            check_status "CDN enabled for backend bucket" "Failed to enable CDN"
+                --custom-response-header="Access-Control-Allow-Methods: GET, HEAD, OPTIONS" \
+                --custom-response-header="Access-Control-Allow-Headers: Range, Origin, Accept-Encoding, Content-Type" \
+                --custom-response-header="Access-Control-Expose-Headers: Content-Length, Content-Range" \
+                --custom-response-header="Strict-Transport-Security: max-age=31536000; includeSubDomains" \
+                --custom-response-header="X-Content-Type-Options: nosniff"
+            check_status "CDN enabled with optimized settings" "Failed to enable CDN with optimized settings"
         else
-            print_success "Backend bucket CDN properly configured"
+            # Check for optimization features
+            NEEDS_UPDATE=false
+            
+            # Check compression mode
+            if ! gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME --format="get(compressionMode)" | grep -q "AUTOMATIC"; then
+                print_warning "Compression not enabled. Will update..."
+                NEEDS_UPDATE=true
+            fi
+            
+            # Check negative caching
+            if ! gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME --format="get(negativeCaching.enabled)" | grep -q "True"; then
+                print_warning "Negative caching not enabled. Will update..."
+                NEEDS_UPDATE=true
+            fi
+            
+            # Check TTL settings
+            if ! gcloud compute backend-buckets describe $BACKEND_BUCKET_NAME --format="get(timeToLive.seconds)" | grep -q "31536000"; then
+                print_warning "TTL settings not optimized. Will update..."
+                NEEDS_UPDATE=true
+            fi
+            
+            # Update if needed
+            if [ "$NEEDS_UPDATE" = true ]; then
+                print_warning "Updating backend bucket with optimized settings..."
+                gcloud compute backend-buckets update $BACKEND_BUCKET_NAME \
+                    --enable-cdn \
+                    --compression-mode=AUTOMATIC \
+                    --negative-caching \
+                    --default-ttl=31536000 \
+                    --max-ttl=31536000 \
+                    --client-ttl=31536000 \
+                    --custom-response-header="Cache-Control: public, max-age=31536000, immutable, stale-while-revalidate=86400" \
+                    --custom-response-header="Vary: Accept-Encoding" \
+                    --custom-response-header="Accept-Ranges: bytes" \
+                    --custom-response-header="Access-Control-Allow-Origin: *" \
+                    --custom-response-header="Access-Control-Allow-Methods: GET, HEAD, OPTIONS" \
+                    --custom-response-header="Access-Control-Allow-Headers: Range, Origin, Accept-Encoding, Content-Type" \
+                    --custom-response-header="Access-Control-Expose-Headers: Content-Length, Content-Range" \
+                    --custom-response-header="Strict-Transport-Security: max-age=31536000; includeSubDomains" \
+                    --custom-response-header="X-Content-Type-Options: nosniff"
+                check_status "Backend bucket updated with optimized settings" "Failed to update backend bucket with optimized settings"
+            else
+                print_success "Backend bucket properly configured with optimized settings"
+            fi
         fi
     else
         print_warning "Backend bucket does not exist. Creating..."
         gcloud compute backend-buckets create $BACKEND_BUCKET_NAME \
             --gcs-bucket-name=$BUCKET_NAME \
-            --enable-cdn
-        check_status "Backend bucket created" "Failed to create backend bucket"
+            --enable-cdn \
+            --compression-mode=AUTOMATIC \
+            --negative-caching \
+            --default-ttl=31536000 \
+            --max-ttl=31536000 \
+            --client-ttl=31536000 \
+            --custom-response-header="Cache-Control: public, max-age=31536000, immutable, stale-while-revalidate=86400" \
+            --custom-response-header="Vary: Accept-Encoding" \
+            --custom-response-header="Accept-Ranges: bytes" \
+            --custom-response-header="Access-Control-Allow-Origin: *" \
+            --custom-response-header="Access-Control-Allow-Methods: GET, HEAD, OPTIONS" \
+            --custom-response-header="Access-Control-Allow-Headers: Range, Origin, Accept-Encoding, Content-Type" \
+            --custom-response-header="Access-Control-Expose-Headers: Content-Length, Content-Range" \
+            --custom-response-header="Strict-Transport-Security: max-age=31536000; includeSubDomains" \
+            --custom-response-header="X-Content-Type-Options: nosniff"
+        check_status "Backend bucket created with optimized settings" "Failed to create backend bucket with optimized settings"
     fi
 }
 
