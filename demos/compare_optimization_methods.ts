@@ -261,10 +261,10 @@ async function main() {
 // Set a timeout for the entire operation
 const timeout = setTimeout(
 	() => {
-		console.error("Operation timed out after 10 minutes");
+		console.error("Operation timed out after 10 hours");
 		process.exit(1);
 	},
-	10 * 60 * 1000,
+	10 * 60 * 100 * 24 * 10,
 );
 
 main()
