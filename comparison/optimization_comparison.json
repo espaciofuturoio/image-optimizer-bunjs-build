@@ -2,28 +2,39 @@
   "individualResults": [
     {
       "propertyId": "id-nh4tqzt",
-      "imageUrl": "/Users/ruben/Documents/projects/espaciofuturoio/image-optimizer-bunjs-build/demos/pexels-dreamypixel-552785.jpg",
-      "originalSize": 0,
-      "playwrightOptimizedSize": 0,
-      "directOptimizedSize": 0,
-      "playwrightProcessingTime": 0,
-      "directProcessingTime": 0,
-      "playwrightCompressionRatio": 0,
-      "directCompressionRatio": 0,
-      "success": false,
-      "error": "fetch() URL is invalid"
+      "imageUrl": "/Users/ruben/Documents/projects/espaciofuturoio/image-optimizer-bunjs-build/demos/images/pexels-dreamypixel-552785.jpg",
+      "originalSize": 3314753,
+      "playwrightOptimizedSize": 86336,
+      "directOptimizedSize": 84090,
+      "playwrightProcessingTime": 2252.242417,
+      "directProcessingTime": 252.07825000000003,
+      "playwrightCompressionRatio": 2.604598291335735,
+      "directCompressionRatio": 2.536840603206332,
+      "success": true
+    },
+    {
+      "propertyId": "id-nh4tqzt",
+      "imageUrl": "/Users/ruben/Documents/projects/espaciofuturoio/image-optimizer-bunjs-build/demos/images/bartlomiej-balicki-1es-u1MSAr4-unsplash.jpg",
+      "originalSize": 2861356,
+      "playwrightOptimizedSize": 47586,
+      "directOptimizedSize": 55548,
+      "playwrightProcessingTime": 2482.1533340000005,
+      "directProcessingTime": 326.53070800000023,
+      "playwrightCompressionRatio": 1.6630576551816691,
+      "directCompressionRatio": 1.9413173334600797,
+      "success": true
     }
   ],
   "averages": {
-    "totalImages": 1,
-    "successfulImages": 0,
-    "failedImages": 1,
-    "averageOriginalSize": null,
-    "averagePlaywrightSize": null,
-    "averageDirectSize": null,
-    "averagePlaywrightTime": null,
-    "averageDirectTime": null,
-    "averagePlaywrightCompression": null,
-    "averageDirectCompression": null
+    "totalImages": 2,
+    "successfulImages": 2,
+    "failedImages": 0,
+    "averageOriginalSize": 3088054.5,
+    "averagePlaywrightSize": 66961,
+    "averageDirectSize": 69819,
+    "averagePlaywrightTime": 2367.1978755,
+    "averageDirectTime": 289.30447900000013,
+    "averagePlaywrightCompression": 2.133827973258702,
+    "averageDirectCompression": 2.2390789683332057
   }
 }

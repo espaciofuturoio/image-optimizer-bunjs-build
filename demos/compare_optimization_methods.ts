@@ -54,9 +54,21 @@ async function compareOptimizationMethods(
 		console.log(`\nProcessing image: ${imageUrl}`);
 
 		// Get original image size
-		const response = await fetch(imageUrl);
-		const buffer = await response.arrayBuffer();
-		const originalSize = buffer.byteLength;
+		let originalSize: number;
+		let buffer: ArrayBuffer;
+
+		if (imageUrl.startsWith("http")) {
+			// Handle remote images
+			const response = await fetch(imageUrl);
+			buffer = await response.arrayBuffer();
+			originalSize = buffer.byteLength;
+		} else {
+			// Handle local images
+			const file = Bun.file(imageUrl);
+			buffer = await file.arrayBuffer();
+			originalSize = buffer.byteLength;
+		}
+
 		console.log(`Original size: ${(originalSize / 1024).toFixed(2)}KB`);
 
 		// Measure Playwright optimization
