@@ -382,3 +382,103 @@ GOOGLE_CLOUD_KEY_FILE_PATH=path/to/your/key.json
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Common Commands Reference
+
+Here's a quick reference for commonly used commands in this project:
+
+### Setting Up a New Bucket with CDN
+```bash
+# Basic setup
+./setup-gcp-bucket.sh your-bucket-name
+
+# Setup with custom domain
+./setup-gcp-bucket.sh your-bucket-name --domain=cdn.yourdomain.com
+
+# Delete existing resources and recreate
+./setup-gcp-bucket.sh your-bucket-name --delete
+
+# Force recreation of resources
+./setup-gcp-bucket.sh your-bucket-name --force
+
+# Combined options
+./setup-gcp-bucket.sh your-bucket-name --delete --force --domain=cdn.yourdomain.com
+```
+
+### Validating Bucket Configuration
+```bash
+# Basic validation
+./validate-bucket.sh your-bucket-name
+
+# Validation with custom domain
+./validate-bucket.sh your-bucket-name --domain=cdn.yourdomain.com
+```
+
+### Setting Up Monitoring
+```bash
+# Basic monitoring setup
+./setup-monitoring.sh
+
+# Monitoring with custom domain
+./setup-monitoring.sh --domain=cdn.yourdomain.com
+```
+
+### Managing Buckets and CDN
+```bash
+# Start the management interface
+./manage-gcp-buckets.sh
+
+# From the menu, you can:
+# 1. List and manage storage buckets
+# 2. List and manage backend buckets
+# 3. Show detailed bucket information
+# 4. Remove ALL resources (dangerous)
+# 5. Manage custom domains
+```
+
+### Complete Workflow Example
+```bash
+# 1. Set up a new bucket with CDN and custom domain
+./setup-gcp-bucket.sh my-images-bucket --domain=cdn.mywebsite.com
+
+# 2. Validate the configuration
+./validate-bucket.sh my-images-bucket --domain=cdn.mywebsite.com
+
+# 3. Set up monitoring
+./setup-monitoring.sh --domain=cdn.mywebsite.com
+
+# 4. Manage resources as needed
+./manage-gcp-buckets.sh
+```
+
+## Troubleshooting Commands
+
+### Check SSL Certificate Status
+```bash
+gcloud compute ssl-certificates describe your-bucket-name-cert --global
+```
+
+### Test CDN Connectivity
+```bash
+# Test via IP
+curl -I https://<load-balancer-ip>/path/to/test/file.jpg
+
+# Test via domain (if configured)
+curl -I https://cdn.yourdomain.com/path/to/test/file.jpg
+```
+
+### Check DNS Configuration
+```bash
+dig cdn.yourdomain.com +short
+```
+
+### View CDN Cache Status
+```bash
+# Check if content is served from cache (Age header > 0 indicates cache hit)
+curl -D- -o /dev/null https://cdn.yourdomain.com/path/to/file.jpg
+```
+
+### Check Backend Bucket Configuration
+```bash
+gcloud compute backend-buckets describe your-bucket-name-backend
+```
